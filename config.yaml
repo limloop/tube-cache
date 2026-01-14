@@ -1,0 +1,27 @@
+# Конфигурация Video Server
+# Все пути относительны к этой папке
+
+storage:
+  base_path: "./data"          # Базовая папка для всех данных
+  max_size_gb: 50              # Максимальный размер хранилища в GB
+
+download:
+  max_concurrent: 2            # Максимум параллельных загрузок
+  timeout_seconds: 300         # Таймаут загрузки
+  retry_attempts: 2            # Попытки повтора при ошибке
+
+server:
+  host: "0.0.0.0"             # Хост для запуска
+  port: 8000                   # Порт для запуска
+  workers: 1                   # Количество воркеров uvicorn
+
+sources:
+  # Конфигурация для YouTube
+  youtube.com:
+    format: "best[height<=720]"  # Максимум 720p
+    extract_audio: false
+  
+  # Конфигурация по умолчанию для остальных сайтов
+  default:
+    format: "best"
+    extract_audio: false

@@ -1,0 +1,14 @@
+# Основные зависимости
+fastapi
+uvicorn[standard]
+
+# Загрузка видео
+yt-dlp
+
+# База данных
+aiosqlite
+
+# Конфигурация
+pydantic
+pydantic-settings
+pyyaml
