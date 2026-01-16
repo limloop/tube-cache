@@ -12,6 +12,7 @@ from app.config import settings
 from app.downloader import VideoDownloader
 from app.database import db
 from app.models import VideoStatus
+from app.storage import storage
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +65,8 @@ class TaskQueue:
         
         try:
             # Восстанавливаем незавершенные задачи из БД
-            restored = await self._restore_pending_tasks()
-            logger.info(f"Восстановлено задач из БД: {restored}")
+            # restored = await self._restore_pending_tasks()
+            # logger.info(f"Восстановлено задач из БД: {restored}")
             
             # Запускаем фоновый воркер
             self._worker_task = asyncio.create_task(self._worker_loop())

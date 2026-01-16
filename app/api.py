@@ -9,9 +9,9 @@ from typing import Optional
 
 from app.config import settings
 from app.database import db
-from app.queue import queue  # Теперь наша автономная очередь
+from app.queue import queue
 from app.storage import storage
-from app.utils import generate_video_hash, get_download_config_for_url, normalize_title
+from app.utils import generate_video_hash, get_download_config_for_url, normalize_title, normalize_video_url, check_video_file_integrity
 from app.models import VideoStatus, VideoRequest, TaskStatus, VideoMetadata, StorageInfo
 
 logger = logging.getLogger(__name__)
@@ -75,6 +75,19 @@ async def request_video(url: str = Query(..., description="URL видео")):
     """
     Запрашивает скачивание видео
     """
+    # Нормализуем и проверяем URL
+    normalized_url = normalize_video_url(url)
+    
+    if normalized_url is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Некорректный URL. Укажите валидную ссылку на видео."
+        )
+    
+    if url != normalized_url:
+        logger.debug(f"Нормализация URL: {url} -> {normalized_url}")
+        url = normalized_url
+    
     # Получаем параметры качества для генерации хеша
     format_spec, _ = get_download_config_for_url(url)
     
@@ -88,13 +101,33 @@ async def request_video(url: str = Query(..., description="URL видео")):
         status = VideoStatus(video['status'])
         
         if status == VideoStatus.READY:
-            # Видео готово
-            return TaskStatus(
-                hash=video_hash,
-                status=status,
-                stream_url=f"/stream/{video_hash}",
-                message="Видео готово к просмотру"
-            )
+            # ПРОВЕРКА: Убедимся что файл действительно существует и целый
+            file_path = await storage.find_video_path(video_hash)
+            
+            if not file_path or not file_path.exists():
+                # Файл потерян
+                logger.warning(f"Файл потерян для готового видео: {video_hash[:12]}...")
+                await db.mark_video_deleted(video_hash)
+                # Продолжаем как новую задачу
+            
+            elif not check_video_file_integrity(file_path):
+                # Файл поврежден
+                logger.warning(f"Поврежденный файл для готового видео: {video_hash[:12]}...")
+                try:
+                    file_path.unlink()
+                except:
+                    pass
+                await db.mark_video_deleted(video_hash)
+                # Продолжаем как новую задачу
+            
+            else:
+                # Файл в порядке, возвращаем ссылку
+                return TaskStatus(
+                    hash=video_hash,
+                    status=status,
+                    stream_url=f"/stream/{video_hash}",
+                    message="Видео готово к просмотру"
+                )
         
         elif status == VideoStatus.FAILED:
             # Предыдущая загрузка провалилась, пробуем заново
@@ -169,6 +202,19 @@ async def stream_video(video_hash: str, request: Request):
         await db.update_status(video_hash, VideoStatus.DELETED)
         raise HTTPException(status_code=404, detail="Файл видео не найден")
     
+    if not check_video_file_integrity(file_path):
+        logger.error(f"Поврежденный файл при стриминге: {video_hash[:12]}...")
+        
+        # Удаляем файл и обновляем статус
+        try:
+            file_path.unlink()
+        except:
+            pass
+        
+        await db.mark_video_deleted(video_hash)
+        raise HTTPException(status_code=410, detail="Файл поврежден, требуется повторная загрузка")
+
+
     # Определяем MIME type
     mime_type = "video/mp4"
     if file_path.suffix == '.webm':

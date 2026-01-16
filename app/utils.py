@@ -3,7 +3,10 @@
 """
 import re
 import hashlib
-from urllib.parse import urlparse
+import subprocess
+import os
+from pathlib import Path
+from urllib.parse import urlparse, parse_qs, urlunparse
 from typing import Tuple, Optional
 from app.config import settings
 
@@ -122,3 +125,220 @@ def format_file_size(size_bytes: Optional[int]) -> str:
         size /= 1024.0
     
     return f"{size:.1f} TB"
+
+def normalize_youtube_url(url: str) -> str:
+    """
+    Нормализует YouTube URL к стандартному виду
+    
+    Поддерживает форматы:
+    - https://www.youtube.com/watch?v=ID
+    - https://youtube.com/watch?v=ID
+    - http://youtube.com/watch?v=ID
+    - https://youtu.be/ID
+    - https://www.youtu.be/ID
+    - youtube.com/watch?v=ID (без схемы)
+    - m.youtube.com/watch?v=ID (мобильная версия)
+    
+    Возвращает: https://www.youtube.com/watch?v=ID
+    
+    Args:
+        url: Любой YouTube URL
+        
+    Returns:
+        Нормализованный URL
+    """
+    from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
+    
+    try:
+        # Добавляем схему если ее нет
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
+        
+        parsed = urlparse(url)
+        
+        # Определяем домен
+        domain = parsed.netloc.lower()
+        
+        # Нормализуем домен
+        if domain in ['youtu.be', 'www.youtu.be']:
+            # Короткие ссылки youtu.be
+            video_id = parsed.path.strip('/')
+            if video_id:
+                return f"https://www.youtube.com/watch?v={video_id}"
+        
+        elif 'youtube.com' in domain:
+            # Все варианты youtube.com
+            # Извлекаем параметры
+            query_params = parse_qs(parsed.query)
+            video_id = query_params.get('v', [None])[0]
+            
+            # Если v параметра нет, проверяем другие возможные форматы
+            if not video_id:
+                # Проверяем формат /watch/v=ID (редкий случай)
+                if '/watch' in parsed.path:
+                    path_parts = parsed.path.split('/')
+                    for part in path_parts:
+                        if part.startswith('v='):
+                            video_id = part[2:]
+                            break
+            
+            if video_id:
+                # Создаем нормализованный URL
+                normalized_query = urlencode({'v': video_id})
+                normalized_url = urlunparse((
+                    'https',
+                    'www.youtube.com',
+                    '/watch',
+                    '',
+                    normalized_query,
+                    ''
+                ))
+                return normalized_url
+        
+        # Если не удалось распознать как YouTube - возвращаем как есть
+        return url
+        
+    except Exception:
+        # В случае ошибки возвращаем оригинальный URL
+        return url
+
+def clean_and_validate_url(url: str) -> Optional[str]:
+    """
+    Очищает URL от кавычек и лишних символов, проверяет валидность
+    
+    Args:
+        url: Сырой URL (может быть в кавычках, с пробелами и т.д.)
+        
+    Returns:
+        Очищенный валидный URL или None если URL невалиден
+    """
+    if not url or not isinstance(url, str):
+        return None
+    
+    # Убираем начальные и конечные пробелы
+    url = url.strip()
+    
+    # Убираем кавычки всех типов
+    quotes = ['"', "'", '`', '«', '»', '“', '”']
+    for quote in quotes:
+        if url.startswith(quote) and url.endswith(quote):
+            url = url[1:-1].strip()
+    
+    # Убираем угловые скобки (редко, но бывает)
+    if url.startswith('<') and url.endswith('>'):
+        url = url[1:-1].strip()
+    
+    # Проверяем, что это похоже на URL
+    # Должен содержать точку (домен) и слеш или знак вопроса
+    if '.' not in url:
+        return None
+    
+    # Проверяем минимальную длину
+    if len(url) < 10:  # http://a.b минимальная длина
+        return None
+    
+    # Проверяем наличие схемы, добавляем если нет
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+    
+    # Дополнительная валидация через urlparse
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        
+        # Должен быть домен
+        if not parsed.netloc or '.' not in parsed.netloc:
+            return None
+        
+        # Домен должен быть не короче 3 символов (a.b)
+        if len(parsed.netloc) < 3:
+            return None
+        
+        return url
+        
+    except Exception:
+        return None
+
+def normalize_video_url(url: str) -> Optional[str]:
+    """
+    Распознает и нормализует URL видео
+    
+    Args:
+        url: URL видео (может быть с кавычками, пробелами и т.д.)
+        
+    Returns:
+        Нормализованный URL или None если URL невалиден
+    """
+    # Сначала очищаем URL
+    cleaned_url = clean_and_validate_url(url)
+    
+    if not cleaned_url:
+        return None
+    
+    try:
+        from urllib.parse import urlparse
+        
+        parsed = urlparse(cleaned_url)
+        domain = parsed.netloc.lower()
+        
+        # Убираем www.
+        if domain.startswith('www.'):
+            domain = domain[4:]
+        
+        # Нормализация по доменам
+        if domain in ['youtube.com', 'youtu.be']:
+            return normalize_youtube_url(cleaned_url)
+        
+        # Для других источников можно добавить нормализацию
+        
+        # По умолчанию возвращаем очищенный URL
+        return cleaned_url
+        
+    except Exception:
+        return cleaned_url
+
+def check_video_file_integrity(file_path: Path) -> bool:
+    """
+    Проверяет целостность видеофайла с помощью ffprobe
+    
+    Args:
+        file_path: Путь к файлу
+        
+    Returns:
+        True если файл валиден, False если поврежден
+    """
+    try:
+        if not file_path.exists():
+            return False
+        
+        # Быстрая проверка размера
+        file_size = file_path.stat().st_size
+        if file_size < 1024 * 100:  # Меньше 100KB - точно битый
+            return False
+        
+        # Проверка через ffprobe
+        cmd = [
+            'ffprobe',
+            '-v', 'error',
+            '-select_streams', 'v:0',
+            '-count_frames',
+            '-show_entries', 'stream=codec_type',
+            '-of', 'csv=p=0',
+            str(file_path)
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=5  # Таймаут 5 секунд
+        )
+        
+        # Если ffprobe завершился успешно и нашел видеопоток
+        return result.returncode == 0 and 'video' in result.stdout
+        
+    except subprocess.TimeoutExpired:
+        # Файл слишком сложный для быстрой проверки, считаем валидным
+        return True
+    except Exception:
+        return False

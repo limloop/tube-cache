@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from app.config import settings
 from app.database import db
+from app.utils import check_video_file_integrity
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,18 @@ class StorageManager:
     async def _monitor_storage(self):
         """Периодически проверяет состояние хранилища"""
         try:
+            check_counter = 0
+
             while self._is_monitoring:
                 # Проверяем каждые 5 минут
                 await asyncio.sleep(300)  # 5 минут
+                check_counter += 1
                 
+                # Каждые 12 проверок (1 час) делаем полную проверку файлов
+                if check_counter % 12 == 0:
+                    logger.info("🚨 Запуск полной проверки целостности файлов...")
+                    await self._check_all_video_files()
+
                 info = await self.get_storage_info()
                 used_percent = info['used_percent']
                 
@@ -61,6 +70,45 @@ class StorageManager:
             pass
         except Exception as e:
             logger.error(f"Ошибка в мониторе хранилища: {e}")
+
+    async def _check_all_video_files(self) -> List[str]:
+        """
+        Проверяет все видеофайлы на целостность
+        
+        Returns:
+            Список поврежденных файлов
+        """
+        damaged = []
+        
+        try:
+            videos = await db.get_all_ready_videos()
+            
+            for video in videos:
+                video_hash = video['hash']
+                file_path = self._find_video_file(video_hash)
+                
+                if file_path and file_path.exists():
+                    if not check_video_file_integrity(file_path):
+                        logger.warning(f"Найден поврежденный файл: {video_hash[:12]}...")
+                        damaged.append(video_hash)
+                        
+                        # Удаляем файл и обновляем БД
+                        try:
+                            file_path.unlink()
+                            await db.mark_video_deleted(video_hash)
+                        except Exception as e:
+                            logger.error(f"Не удалось удалить поврежденный файл {video_hash}: {e}")
+            
+            if damaged:
+                logger.warning(f"Обнаружено поврежденных файлов: {len(damaged)}")
+            else:
+                logger.info("Все файлы в порядке")
+                
+            return damaged
+            
+        except Exception as e:
+            logger.error(f"Ошибка проверки файлов: {e}")
+            return []
 
     async def cleanup_old_videos(self, aggressive: bool = False) -> List[str]:
         """
@@ -122,6 +170,16 @@ class StorageManager:
                 
                 if file_path and file_path.exists():
                     try:
+                        # ПРОВЕРКА: Если файл поврежден - удаляем в любом случае
+                        if not check_video_file_integrity(file_path):
+                            logger.warning(f"Обнаружен поврежденный файл: {video_hash[:12]}...")
+                            # Помечаем как удаленный в БД
+                            await db.mark_video_deleted(video_hash)
+                            file_path.unlink()
+                            total_size -= file_size
+                            deleted_hashes.append(video_hash)
+                            continue
+
                         # Проверяем, не является ли видео "популярным"
                         # Не удаляем видео, к которым недавно обращались
                         last_accessed = video.get('last_accessed')
@@ -155,7 +213,7 @@ class StorageManager:
         except Exception as e:
             logger.error(f"❌ Ошибка очистки хранилища: {e}")
             return deleted_hashes
-    
+
     def _find_video_file(self, video_hash: str) -> Optional[Path]:
         """
         Быстрый поиск файла видео по хешу

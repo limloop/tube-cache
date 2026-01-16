@@ -23,9 +23,9 @@ class StorageConfig(BaseModel):
     
     @property
     def temp_path(self) -> str:
-        """Путь к временным файлам"""
+        """Путь к папке с временными файлами"""
         return str(Path(self.base_path) / "temp")
-    
+
     @property
     def db_path(self) -> str:
         """Путь к базе данных"""
@@ -112,8 +112,8 @@ def _create_required_dirs(storage_config: StorageConfig):
     """Создает необходимые директории"""
     dirs_to_create = [
         storage_config.base_path,
-        storage_config.videos_path,
         storage_config.temp_path,
+        storage_config.videos_path,
         storage_config.logs_path
     ]
     
