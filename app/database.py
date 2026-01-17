@@ -31,8 +31,10 @@ class Database:
             # Включаем оптимизации SQLite
             await self.conn.execute("PRAGMA journal_mode = WAL")
             await self.conn.execute("PRAGMA synchronous = NORMAL")
-            await self.conn.execute("PRAGMA cache_size = -2000")  # 2MB кэша
+            await self.conn.execute("PRAGMA cache_size = -2000")
             await self.conn.execute("PRAGMA foreign_keys = ON")
+            await self.conn.execute("PRAGMA wal_autocheckpoint = 400")
+            await self.conn.execute("PRAGMA mmap_size = 268435456")
             
             # Создаем таблицу
             await self.conn.execute(CREATE_VIDEOS_TABLE_SQL)
@@ -51,6 +53,7 @@ class Database:
     async def close(self):
         """Закрывает соединение с базой данных"""
         if hasattr(self, 'conn') and self.conn:
+            await self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             await self.conn.close()
             logger.info("Соединение с БД закрыто")
     

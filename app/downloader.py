@@ -30,14 +30,7 @@ class VideoDownloader:
     
     async def download(self, url: str, video_hash: str) -> Dict[str, Any]:
         """
-        Асинхронно загружает видео с проверкой целостности
-        
-        Args:
-            url: URL видео
-            video_hash: 64-символьный хеш
-            
-        Returns:
-            Словарь с информацией о загруженном видео
+        Асинхронно загружает видео
         """
         loop = asyncio.get_event_loop()
         temp_file_path = None
@@ -46,101 +39,62 @@ class VideoDownloader:
             # Получаем конфигурацию загрузки
             format_spec, extract_audio = get_download_config_for_url(url)
             
-            # Создаем опции для yt-dlp с загрузкой во временную папку
+            # Создаем опции для yt-dlp
             ydl_opts = self._build_ydl_opts(format_spec, extract_audio, video_hash, temp=True)
             
-            # Используем ленивую загрузку yt-dlp
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Извлекаем информацию без загрузки
-                info = await loop.run_in_executor(
-                    None, 
-                    ydl.extract_info, 
-                    url, 
-                    False
-                )
+                # Извлекаем информацию
+                info = await loop.run_in_executor(None, ydl.extract_info, url, False)
                 
-                # Получаем расширение файла
-                ext = info.get('ext', 'mp4')
-                if extract_audio:
-                    ext = 'mp3'
+                # Определяем расширение
+                ext = 'mp3' if extract_audio else info.get('ext', 'mp4')
                 
-                # Пути для файлов
+                # Пути файлов
                 temp_filename = f"{video_hash}_temp.{ext}"
                 temp_file_path = self.temp_path / temp_filename
                 final_file_path = self.videos_path / f"{video_hash}.{ext}"
                 
-                # Удаляем старые временные файлы если есть
-                for temp_file in self.temp_path.glob(f"{video_hash}_temp*"):
-                    try:
-                        temp_file.unlink()
-                    except:
-                        pass
-                
-                # Скачиваем видео во временную папку
-                logger.info(f"Начинаю загрузку {video_hash[:12]}... во временную папку")
+                # Скачиваем
+                logger.info(f"Загрузка {video_hash[:12]}...")
                 await loop.run_in_executor(None, ydl.download, [url])
                 
-                # Проверяем, что временный файл создан
-                if not temp_file_path.exists():
-                    # Ищем файл в temp папке
-                    found = False
-                    for file in self.temp_path.glob(f"{video_hash}_temp*"):
-                        temp_file_path = file
-                        ext = file.suffix[1:]
-                        found = True
+                # ⚠️ ЖДЕМ завершения операций yt-dlp
+                await asyncio.sleep(2)
+                
+                # Ищем фактический файл (может быть с другим именем)
+                actual_temp_file = None
+                for file in self.temp_path.glob(f"{video_hash}_temp*"):
+                    if file.suffix != '.part':  # Игнорируем .part файлы
+                        actual_temp_file = file
                         break
-                    
-                    if not found:
-                        raise FileNotFoundError(f"Временный файл не создан для {video_hash}")
                 
-                # ПРОВЕРКА ЦЕЛОСТНОСТИ ФАЙЛА
-                logger.info(f"Проверяю целостность файла {video_hash[:12]}...")
+                if not actual_temp_file:
+                    raise FileNotFoundError(f"Файл не найден в temp для {video_hash}")
                 
-                # 1. Проверка размера файла
-                file_size = temp_file_path.stat().st_size
+                # Проверяем файл
+                file_size = actual_temp_file.stat().st_size
                 if file_size == 0:
                     raise ValueError("Файл имеет нулевой размер")
                 
-                # 2. Проверка через ffprobe (если установлен)
+                # Базовые проверки целостности (опционально)
                 if not extract_audio and await self._has_ffprobe():
-                    is_valid = await self._verify_with_ffprobe(temp_file_path)
-                    if not is_valid:
-                        raise ValueError("Файл поврежден (проверка ffprobe)")
+                    if not await self._verify_with_ffprobe(actual_temp_file):
+                        raise ValueError("Файл поврежден")
                 
-                # 3. Для аудио - дополнительная проверка
-                elif extract_audio:
-                    if not await self._verify_audio_file(temp_file_path):
-                        raise ValueError("Аудиофайл поврежден")
+                # Переносим в финальную папку
+                final_file_path.unlink(missing_ok=True)  # Тихий unlink
+                shutil.move(str(actual_temp_file), str(final_file_path))
                 
-                # Удаляем старый файл если существует
-                if final_file_path.exists():
-                    try:
-                        final_file_path.unlink()
-                        logger.info(f"Удалил старый файл {video_hash[:12]}...")
-                    except Exception as e:
-                        logger.warning(f"Не удалось удалить старый файл: {e}")
-                
-                # Переносим файл в финальную папку
-                logger.info(f"Переношу файл {video_hash[:12]}... в постоянное хранилище")
-                shutil.move(str(temp_file_path), str(final_file_path))
-                
-                # Двойная проверка финального файла
                 if not final_file_path.exists():
-                    raise FileNotFoundError(f"Файл не перемещен в финальную папку")
+                    raise FileNotFoundError(f"Файл не перемещен")
                 
-                final_size = final_file_path.stat().st_size
-                if final_size != file_size:
-                    logger.warning(f"Размер файла изменился при перемещении: {file_size} -> {final_size}")
-                
-                # Нормализуем название
-                title = normalize_title(info.get('title', ''))
-                
+                # Возвращаем информацию
                 return {
                     'file_path': str(final_file_path),
-                    'title': title,
+                    'title': normalize_title(info.get('title', '')),
                     'duration': info.get('duration'),
                     'uploader': info.get('uploader'),
-                    'file_size': final_size,
+                    'file_size': final_file_path.stat().st_size,
                     'file_ext': ext,
                     'original_url': url,
                     'hash': video_hash,
@@ -149,20 +103,11 @@ class VideoDownloader:
                 
         except Exception as e:
             logger.error(f"Ошибка загрузки {url}: {e}")
-            
-            # Удаляем временный файл при ошибке
-            if temp_file_path and temp_file_path.exists():
-                try:
-                    temp_file_path.unlink()
-                    logger.info(f"Удалил временный файл после ошибки: {temp_file_path.name}")
-                except:
-                    pass
-            
-            raise
+            raise  # Просто пробрасываем исключение
         
         finally:
-            # Очистка временных файлов
-            self._cleanup_temp_files(video_hash)
+            # ТОЛЬКО ОДНА очистка в конце
+            await self._safe_cleanup_after_download(video_hash)
     
     def _build_ydl_opts(
         self, 
@@ -200,7 +145,7 @@ class VideoDownloader:
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
-            'nooverwrites': True,              # Не перезаписывать файлы
+            'nooverwrites': False,
             
             # Хук прогресса
             'progress_hooks': [self._progress_hook],
@@ -220,6 +165,10 @@ class VideoDownloader:
             # Для сегментированных форматов (DASH/HLS)
             'concurrent_fragment_downloads': 1,  # 1 поток для стабильности
             'skip_unavailable_fragments': True,  # Пропускать недоступные фрагменты
+
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
         }
         
         # Для аудио
@@ -312,17 +261,43 @@ class VideoDownloader:
         except:
             return False
     
-    def _cleanup_temp_files(self, video_hash: str):
-        """Очищает временные файлы"""
+    async def _safe_cleanup_after_download(self, video_hash: str):
+        """
+        Безопасная очистка ПОСЛЕ завершения загрузки
+        Удаляет только старые/завершенные файлы
+        """
         try:
+            import time
+            current_time = time.time()
+            
+            # Ждем немного на всякий случай
+            await asyncio.sleep(1)
+            
             for temp_file in self.temp_path.glob(f"{video_hash}_temp*"):
                 try:
-                    temp_file.unlink()
-                    logger.debug(f"Очищен временный файл: {temp_file.name}")
+                    if not temp_file.exists():
+                        continue
+                    
+                    # НИКОГДА не удаляем .part файлы - yt-dlp сам управляет ими
+                    if '.part' in temp_file.name:
+                        # Удаляем только ОЧЕНЬ старые .part файлы (> 30 минут)
+                        file_age = current_time - temp_file.stat().st_mtime
+                        if file_age > 1800:  # 30 минут
+                            temp_file.unlink()
+                            logger.debug(f"Удалил старый .part файл: {temp_file.name}")
+                        continue
+                    
+                    # Для обычных файлов - удаляем если они старше 5 минут
+                    file_age = current_time - temp_file.stat().st_mtime
+                    if file_age > 300:  # 5 минут
+                        temp_file.unlink()
+                        logger.debug(f"Удалил старый временный файл: {temp_file.name}")
+                        
                 except Exception as e:
                     logger.debug(f"Не удалось удалить {temp_file}: {e}")
+                    
         except Exception as e:
-            logger.debug(f"Ошибка при очистке временных файлов: {e}")
+            logger.debug(f"Ошибка безопасной очистки: {e}")
     
     def _progress_hook(self, d: Dict[str, Any]):
         """
