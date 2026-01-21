@@ -12,6 +12,7 @@ from app.queue import queue
 from app.storage import storage
 from app.utils import generate_video_hash, get_download_config_for_url, normalize_title, normalize_video_url, check_video_file_integrity, get_date_sort_key
 from app.models import VideoStatus, VideoRequest, TaskStatus, VideoMetadata, StorageInfo
+from app.webui import router as webui_router
 from app import logger
 
 
@@ -31,6 +32,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(webui_router)
 
 @app.on_event("startup")
 async def startup_event():

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Очередь загрузок - Video Server{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>
+        <i class="bi bi-clock-history"></i> Очередь загрузок
+    </h1>
+    <a href="/" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Добавить видео
+    </a>
+</div>
+
+{% if queue_info %}
+<div class="row">
+    <!-- Статистика -->
+    <div class="col-md-4 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-speedometer2"></i> Статистика
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <div class="list-group-item d-flex justify-content-between">
+                        <span>В очереди:</span>
+                        <strong class="text-primary">{{ queue_info.queued_tasks }}</strong>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between">
+                        <span>Активные:</span>
+                        <strong class="text-warning">{{ queue_info.active_tasks }}</strong>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between">
+                        <span>Макс. параллельно:</span>
+                        <strong>{{ queue_info.max_concurrent }}</strong>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between">
+                        <span>Всего загружено:</span>
+                        <strong class="text-success">{{ queue_info.stats.total_processed }}</strong>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between">
+                        <span>Ошибок:</span>
+                        <strong class="text-danger">{{ queue_info.stats.total_failed }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Текущая очередь -->
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-task"></i> Текущие задачи
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                {% if queue_info.queue %}
+                <div class="list-group list-group-flush">
+                    {% for task in queue_info.queue %}
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between">
+                            <div>
+                                <h6 class="mb-1">Задача #{{ loop.index }}</h6>
+                                <small class="text-muted">{{ task.url }}</small>
+                            </div>
+                            <span class="badge bg-secondary">Ожидание</span>
+                        </div>
+                        <div class="mt-2">
+                            <div class="progress" style="height: 6px;">
+                                <div class="progress-bar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted">Позиция в очереди: {{ loop.index }}</small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <div class="display-1 text-muted">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                    <h4 class="mt-3">Очередь пуста</h4>
+                    <p class="text-muted">Нет активных задач загрузки</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="text-center py-5">
+    <div class="display-1 text-muted">
+        <i class="bi bi-exclamation-triangle"></i>
+    </div>
+    <h3 class="mt-3">Информация недоступна</h3>
+    <p class="text-muted">Сервер очереди не запущен или произошла ошибка</p>
+</div>
+{% endif %}
+{% endblock %}

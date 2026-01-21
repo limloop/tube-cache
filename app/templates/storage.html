@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+
+{% block title %}Хранилище - Video Server{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>
+        <i class="bi bi-hdd"></i> Хранилище
+    </h1>
+    <a href="/videos" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-left"></i> К списку видео
+    </a>
+</div>
+
+{% if storage_info %}
+<div class="row">
+    <!-- Основная информация -->
+    <div class="col-md-8">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-pie-chart"></i> Использование хранилища
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Прогресс-бар -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-bold">Заполнено: {{ "%.1f"|format(storage_info.used_percent) }}%</span>
+                        <span class="text-muted">
+                            {{ (storage_info.total_size_bytes / 1024**3)|round(2) }} GB / 
+                            {{ (storage_info.max_size_bytes / 1024**3)|round(2) }} GB
+                        </span>
+                    </div>
+                    <div class="progress" style="height: 25px;">
+                        {% set percent = storage_info.used_percent %}
+                        <div class="progress-bar 
+                            {% if percent < 70 %}bg-success
+                            {% elif percent < 90 %}bg-warning
+                            {% else %}bg-danger{% endif %}" 
+                            role="progressbar" 
+                            style="width: {{ percent }}%"
+                            aria-valuenow="{{ percent }}" 
+                            aria-valuemin="0" 
+                            aria-valuemax="100">
+                            {{ "%.1f"|format(percent) }}%
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Статистика -->
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 border">
+                            <div class="card-body text-center">
+                                <div class="display-6 text-primary">
+                                    <i class="bi bi-camera-video"></i>
+                                </div>
+                                <h2 class="mt-2">{{ storage_info.video_count }}</h2>
+                                <p class="text-muted mb-0">Видео</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 border">
+                            <div class="card-body text-center">
+                                <div class="display-6 text-success">
+                                    <i class="bi bi-hdd"></i>
+                                </div>
+                                <h2 class="mt-2">
+                                    {{ (storage_info.total_size_bytes / 1024**3)|round(2) }} GB
+                                </h2>
+                                <p class="text-muted mb-0">Использовано</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Информация о лимитах -->
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-gear"></i> Настройки
+                </h5>
+            </div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-6">Макс. размер:</dt>
+                    <dd class="col-sm-6">
+                        <strong>{{ (storage_info.max_size_bytes / 1024**3)|round(2) }} GB</strong>
+                    </dd>
+                    
+                    <dt class="col-sm-6">Свободно:</dt>
+                    <dd class="col-sm-6">
+                        {% set free_gb = (storage_info.max_size_bytes - storage_info.total_size_bytes) / 1024**3 %}
+                        <strong class="{% if free_gb < 5 %}text-danger{% else %}text-success{% endif %}">
+                            {{ free_gb|round(2) }} GB
+                        </strong>
+                    </dd>
+                    
+                    <dt class="col-sm-6">Использовано:</dt>
+                    <dd class="col-sm-6">
+                        <strong>{{ "%.1f"|format(storage_info.used_percent) }}%</strong>
+                    </dd>
+                    
+                    <dt class="col-sm-6">Статус:</dt>
+                    <dd class="col-sm-6">
+                        {% set percent = storage_info.used_percent %}
+                        <span class="badge 
+                            {% if percent < 70 %}bg-success
+                            {% elif percent < 90 %}bg-warning
+                            {% else %}bg-danger{% endif %}">
+                            {% if percent < 70 %}Хорошо
+                            {% elif percent < 90 %}Внимание
+                            {% else %}Критично{% endif %}
+                        </span>
+                    </dd>
+                </dl>
+                
+                <hr>
+                
+                <div class="d-grid gap-2">
+                    <form action="/cleanup" method="post" class="d-grid">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="bi bi-trash"></i> Очистить старые видео
+                        </button>
+                    </form>
+                    
+                    <a href="/queue" class="btn btn-outline-info">
+                        <i class="bi bi-clock-history"></i> Проверить очередь
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Подсказки по очистке -->
+<div class="card shadow mt-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">
+            <i class="bi bi-lightbulb"></i> Рекомендации
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="d-flex">
+                    <div class="flex-shrink-0 text-success">
+                        <i class="bi bi-check-circle fs-4"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6>До 70%</h6>
+                        <p class="small text-muted mb-0">
+                            Хранилище в норме. Автоматическая очистка не требуется.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="d-flex">
+                    <div class="flex-shrink-0 text-warning">
+                        <i class="bi bi-exclamation-triangle fs-4"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6>70-90%</h6>
+                        <p class="small text-muted mb-0">
+                            Рекомендуется очистить старые видео. Автоочистка при загрузке новых файлов.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="d-flex">
+                    <div class="flex-shrink-0 text-danger">
+                        <i class="bi bi-exclamation-octagon fs-4"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6>Более 90%</h6>
+                        <p class="small text-muted mb-0">
+                            Срочно очистите хранилище! Новые загрузки могут не начаться.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<!-- Нет информации -->
+<div class="text-center py-5">
+    <div class="display-1 text-muted">
+        <i class="bi bi-exclamation-triangle"></i>
+    </div>
+    <h3 class="mt-3">Информация недоступна</h3>
+    <p class="text-muted">
+        Не удалось получить информацию о хранилище
+    </p>
+    <a href="/" class="btn btn-primary mt-3">
+        <i class="bi bi-house-door"></i> На главную
+    </a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Автоматическое обновление информации о хранилище
+function updateStorageInfo() {
+    fetch('/storage/info')
+        .then(response => response.json())
+        .then(data => {
+            // Обновляем прогресс-бар
+            const progressBar = document.querySelector('.progress-bar');
+            if (progressBar) {
+                const percent = data.used_percent;
+                progressBar.style.width = percent + '%';
+                progressBar.textContent = percent.toFixed(1) + '%';
+                progressBar.setAttribute('aria-valuenow', percent);
+                
+                // Обновляем классы в зависимости от процента
+                progressBar.className = 'progress-bar';
+                if (percent < 70) {
+                    progressBar.classList.add('bg-success');
+                } else if (percent < 90) {
+                    progressBar.classList.add('bg-warning');
+                } else {
+                    progressBar.classList.add('bg-danger');
+                }
+            }
+            
+            // Обновляем счетчики
+            const videoCount = document.querySelector('h2:first-of-type');
+            if (videoCount && data.video_count !== undefined) {
+                videoCount.textContent = data.video_count;
+            }
+            
+            const usedGB = document.querySelector('h2:nth-of-type(2)');
+            if (usedGB && data.total_size_bytes !== undefined) {
+                usedGB.textContent = (data.total_size_bytes / 1024**3).toFixed(2) + ' GB';
+            }
+            
+            // Обновляем статус
+            const statusBadge = document.querySelector('.badge');
+            if (statusBadge && data.used_percent !== undefined) {
+                const percent = data.used_percent;
+                statusBadge.className = 'badge';
+                if (percent < 70) {
+                    statusBadge.classList.add('bg-success');
+                    statusBadge.textContent = 'Хорошо';
+                } else if (percent < 90) {
+                    statusBadge.classList.add('bg-warning');
+                    statusBadge.textContent = 'Внимание';
+                } else {
+                    statusBadge.classList.add('bg-danger');
+                    statusBadge.textContent = 'Критично';
+                }
+            }
+        })
+        .catch(error => console.error('Ошибка обновления:', error));
+}
+
+// Обновляем каждые 30 секунд если страница видима
+if (document.visibilityState !== 'hidden') {
+    setInterval(updateStorageInfo, 30000);
+}
+
+// Обновляем при возвращении на вкладку
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') {
+        updateStorageInfo();
+    }
+});
+</script>
+{% endblock %}

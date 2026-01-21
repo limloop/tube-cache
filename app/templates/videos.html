@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Все видео - Video Server{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>
+        <i class="bi bi-collection-play"></i> Все видео
+        <span class="badge bg-secondary">{{ total_videos }}</span>
+    </h1>
+    
+    <div>
+        <a href="/" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Добавить видео
+        </a>
+    </div>
+</div>
+
+<!-- Поиск и фильтры -->
+<div class="card mb-4 shadow">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-6">
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" class="form-control" name="search" 
+                           placeholder="Поиск по названию или автору..." 
+                           value="{{ search }}">
+                </div>
+            </div>
+            <div class="col-md-4">
+                <select class="form-select" name="status">
+                    <option value="ready" {% if status == 'ready' %}selected{% endif %}>
+                        ✅ Только готовые
+                    </option>
+                    <option value="all" {% if status == 'all' %}selected{% endif %}>
+                        📋 Все статусы
+                    </option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="bi bi-funnel"></i> Фильтр
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if videos %}
+<!-- Таблица видео -->
+<div class="card shadow">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Название</th>
+                    <th>Автор</th>
+                    <th>Длительность</th>
+                    <th>Размер</th>
+                    <th>Статус</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for video in videos %}
+                <tr>
+                    <td>
+                        <strong>{{ video.title|truncate(40) }}</strong>
+                        <br>
+                        <small class="text-muted">{{ video.short_hash }}</small>
+                    </td>
+                    <td>{{ video.uploader|truncate(20) }}</td>
+                    <td>{{ video.duration_str }}</td>
+                    <td>{{ video.file_size }}</td>
+                    <td>
+                        <span class="badge {% if video.status == 'ready' %}bg-success
+                                          {% elif video.status == 'downloading' %}bg-info
+                                          {% elif video.status == 'pending' %}bg-warning
+                                          {% else %}bg-danger{% endif %} status-badge">
+                            {{ video.status_text }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if video.status == 'ready' %}
+                        <a href="/video/{{ video.hash }}" class="btn btn-sm btn-success" title="Смотреть">
+                            <i class="bi bi-play-fill"></i>
+                        </a>
+                        <a href="/stream/{{ video.hash }}" class="btn btn-sm btn-outline-primary" title="Стриминг" target="_blank">
+                            <i class="bi bi-cast"></i>
+                        </a>
+                        {% endif %}
+                        <a href="/info/{{ video.hash }}" class="btn btn-sm btn-outline-info" title="Информация">
+                            <i class="bi bi-info-circle"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Пагинация -->
+{% if total_pages > 1 %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        <li class="page-item {% if not has_prev %}disabled{% endif %}">
+            <a class="page-link" href="?page={{ prev_page }}&search={{ search }}&status={{ status }}">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+        </li>
+        
+        {% for p in range(1, total_pages + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+            <a class="page-link" href="?page={{ p }}&search={{ search }}&status={{ status }}">
+                {{ p }}
+            </a>
+        </li>
+        {% endfor %}
+        
+        <li class="page-item {% if not has_next %}disabled{% endif %}">
+            <a class="page-link" href="?page={{ next_page }}&search={{ search }}&status={{ status }}">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<!-- Нет видео -->
+<div class="text-center py-5">
+    <div class="display-1 text-muted">
+        <i class="bi bi-film"></i>
+    </div>
+    <h3 class="mt-3">Видео не найдены</h3>
+    <p class="text-muted">
+        {% if search %}
+        По запросу "{{ search }}" ничего не найдено
+        {% else %}
+        Еще нет загруженных видео. Добавьте первое видео!
+        {% endif %}
+    </p>
+    <a href="/" class="btn btn-primary btn-lg mt-3">
+        <i class="bi bi-cloud-download"></i> Загрузить видео
+    </a>
+</div>
+{% endif %}
+{% endblock %}

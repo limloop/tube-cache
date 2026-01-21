@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}{{ video.title }} - Video Server{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Видеоплеер -->
+    <div class="col-lg-8">
+        <div class="card shadow mb-4">
+            <div class="card-body p-0">
+                <div class="ratio ratio-16x9">
+                    <video controls class="w-100">
+                        <source src="/stream/{{ video.hash }}" type="{{ video.mime_type }}">
+                        Ваш браузер не поддерживает видео тег.
+                    </video>
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="d-flex justify-content-between">
+                    <span class="badge bg-secondary">{{ video.file_ext|upper }}</span>
+                    <span class="text-muted">{{ video.duration_str }} • {{ video.file_size }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Информация о видео -->
+    <div class="col-lg-4">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-info-circle"></i> Информация
+                </h5>
+            </div>
+            <div class="card-body">
+                <h4 class="card-title">{{ video.title }}</h4>
+                
+                <dl class="row mt-3">
+                    <dt class="col-sm-4">Автор:</dt>
+                    <dd class="col-sm-8">{{ video.uploader }}</dd>
+                    
+                    <dt class="col-sm-4">Длительность:</dt>
+                    <dd class="col-sm-8">{{ video.duration_str }}</dd>
+                    
+                    <dt class="col-sm-4">Размер:</dt>
+                    <dd class="col-sm-8">{{ video.file_size }}</dd>
+                    
+                    <dt class="col-sm-4">Формат:</dt>
+                    <dd class="col-sm-8">{{ video.file_ext|upper }}</dd>
+                    
+                    <dt class="col-sm-4">Статус:</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge {% if video.status == 'ready' %}bg-success
+                                          {% elif video.status == 'downloading' %}bg-info
+                                          {% elif video.status == 'pending' %}bg-warning
+                                          {% else %}bg-danger{% endif %}">
+                            {{ video.status_text }}
+                        </span>
+                    </dd>
+                    
+                    <dt class="col-sm-4">Просмотров:</dt>
+                    <dd class="col-sm-8">{{ video.access_count }}</dd>
+                    
+                    <dt class="col-sm-4">Добавлено:</dt>
+                    <dd class="col-sm-8">{{ video.created_at if video.created_at else 'Неизвестно' }}</dd>
+                    
+                    <dt class="col-sm-4">Последний просмотр:</dt>
+                    <dd class="col-sm-8">
+                        {% if video.last_accessed %}
+                            {{ video.last_accessed }}
+                        {% else %}
+                            Никогда
+                        {% endif %}
+                    </dd>
+                </dl>
+                
+                <hr>
+                
+                <div class="d-grid gap-2">
+                    <a href="/stream/{{ video.hash }}" class="btn btn-primary" target="_blank">
+                        <i class="bi bi-play-fill"></i> Открыть в плеере
+                    </a>
+                    <a href="{{ video.source_url }}" class="btn btn-outline-secondary" target="_blank">
+                        <i class="bi bi-link-45deg"></i> Исходная ссылка
+                    </a>
+                    <a href="/videos" class="btn btn-outline-info">
+                        <i class="bi bi-arrow-left"></i> Назад к списку
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Автозапуск видео при загрузке страницы (опционально)
+document.addEventListener('DOMContentLoaded', function() {
+    const video = document.querySelector('video');
+    if (video) {
+        // Сохраняем позицию просмотра при перезагрузке
+        const savedTime = localStorage.getItem('video_{{ video.hash }}_time');
+        if (savedTime) {
+            video.currentTime = parseFloat(savedTime);
+        }
+        
+        // Сохраняем позицию при изменении
+        video.addEventListener('timeupdate', function() {
+            localStorage.setItem('video_{{ video.hash }}_time', video.currentTime);
+        });
+    }
+});
+</script>
+{% endblock %}

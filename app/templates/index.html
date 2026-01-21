@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Главная - Video Server{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">
+                    <i class="bi bi-cloud-download"></i> Загрузить видео
+                </h4>
+            </div>
+            <div class="card-body">
+                <form action="/download" method="post">
+                    <div class="mb-3">
+                        <label for="url" class="form-label">Ссылка на видео</label>
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="bi bi-link"></i>
+                            </span>
+                            <input type="url" class="form-control" id="url" name="url" 
+                                   placeholder="https://youtube.com/watch?v=..." 
+                                   required>
+                        </div>
+                        <div class="form-text">
+                            Поддерживаемые источники: YouTube, Vimeo и другие
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-download"></i> Загрузить видео
+                        </button>
+                    </div>
+                </form>
+                
+                <hr class="my-4">
+                
+                <div class="text-center">
+                    <a href="/videos" class="btn btn-outline-secondary me-2">
+                        <i class="bi bi-collection-play"></i> Просмотреть все видео
+                    </a>
+                    <a href="/queue" class="btn btn-outline-info">
+                        <i class="bi bi-clock-history"></i> Статус очереди
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        {% if active_tasks %}
+        <div class="card mt-4 shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-hourglass-split"></i> Активные загрузки
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    {% for task in active_tasks %}
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between">
+                            <small class="text-muted">#{{ loop.index }}</small>
+                            <small class="text-muted">{{ task.url }}</small>
+                        </div>
+                        <div class="mt-2">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     style="width: 50%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
