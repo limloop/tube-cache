@@ -8,8 +8,7 @@ from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
 from app.config import settings
 from app.models import SQL_QUERIES, CREATE_VIDEOS_TABLE_SQL, CREATE_INDEXES_SQL, VideoStatus
-
-logger = logging.getLogger(__name__)
+from app import logger
 
 class Database:
     """Класс для оптимизированной работы с SQLite"""

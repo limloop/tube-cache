@@ -8,6 +8,10 @@ import os
 import argparse
 import sys
 from pathlib import Path
+import logging
+from logging.handlers import RotatingFileHandler
+from datetime import datetime
+
 
 # --- Модели конфигурации ---
 
@@ -132,6 +136,62 @@ def parse_args():
     )
     return parser.parse_args()
 
+def setup_logging():
+    """
+    Настраивает логирование в файлы и консоль
+    """
+    logs_dir = Path(settings.storage.logs_path)
+    
+    # Создаем форматтер
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # Файл логов по дате
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    log_file = logs_dir / f"server_{current_date}.log"
+    
+    # Хендлер для файла (ротация по 10MB, максимум 5 файлов)
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10 * 1024 * 1024,  # 10MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.INFO)
+    
+    # Хендлер для консоли
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.INFO)
+    
+    # Настраиваем корневой логгер
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    
+    # Очищаем существующие хендлеры
+    root_logger.handlers.clear()
+    
+    # Добавляем хендлеры
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
+    # Уменьшаем логирование для некоторых библиотек
+    logging.getLogger('yt_dlp').setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    logging.getLogger('asyncio').setLevel(logging.WARNING)
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Логирование настроено. Файл: {log_file}")
+    
+    return logger
+
+
 # Получаем аргументы
 args = parse_args()
 settings = load_config(args.config)
+
+# Инициализируем логирование
+logger = setup_logging()

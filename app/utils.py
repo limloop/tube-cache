@@ -6,7 +6,7 @@ import hashlib
 import subprocess
 import os
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs, urlunparse
+from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
 from typing import Tuple, Optional
 from app.config import settings
 
@@ -130,52 +130,49 @@ def normalize_youtube_url(url: str) -> str:
     """
     Нормализует YouTube URL к стандартному виду
     
-    Поддерживает форматы:
-    - https://www.youtube.com/watch?v=ID
-    - https://youtube.com/watch?v=ID
-    - http://youtube.com/watch?v=ID
-    - https://youtu.be/ID
-    - https://www.youtu.be/ID
-    - youtube.com/watch?v=ID (без схемы)
-    - m.youtube.com/watch?v=ID (мобильная версия)
+    Извлекает только video_id, убирает все остальные параметры:
+    - playlist, list, index, t, start, end, feature, etc.
+    - Оставляет только v параметр
     
-    Возвращает: https://www.youtube.com/watch?v=ID
+    Returns: https://www.youtube.com/watch?v=VIDEO_ID
     
     Args:
         url: Любой YouTube URL
         
     Returns:
-        Нормализованный URL
+        Нормализованный URL только с video_id
     """
-    from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
-    
     try:
         # Добавляем схему если ее нет
         if not url.startswith(('http://', 'https://')):
             url = 'https://' + url
         
         parsed = urlparse(url)
-        
-        # Определяем домен
         domain = parsed.netloc.lower()
         
         # Нормализуем домен
         if domain in ['youtu.be', 'www.youtu.be']:
-            # Короткие ссылки youtu.be
-            video_id = parsed.path.strip('/')
+            # Короткие ссылки youtu.be: https://youtu.be/VIDEO_ID?t=10
+            # Извлекаем video_id из пути, игнорируем все параметры
+            video_id = parsed.path.strip('/').split('?')[0]  # Убираем query из пути если есть
             if video_id:
                 return f"https://www.youtube.com/watch?v={video_id}"
         
         elif 'youtube.com' in domain:
             # Все варианты youtube.com
-            # Извлекаем параметры
             query_params = parse_qs(parsed.query)
             video_id = query_params.get('v', [None])[0]
             
-            # Если v параметра нет, проверяем другие возможные форматы
+            # Если v параметра нет в query, проверяем другие форматы
             if not video_id:
-                # Проверяем формат /watch/v=ID (редкий случай)
-                if '/watch' in parsed.path:
+                # Проверяем format /embed/VIDEO_ID
+                if '/embed/' in parsed.path:
+                    video_id = parsed.path.split('/embed/')[1].split('?')[0].split('/')[0]
+                # Проверяем format /v/VIDEO_ID
+                elif '/v/' in parsed.path:
+                    video_id = parsed.path.split('/v/')[1].split('?')[0].split('/')[0]
+                # Проверяем format /watch/v=ID (редкий)
+                elif '/watch' in parsed.path:
                     path_parts = parsed.path.split('/')
                     for part in path_parts:
                         if part.startswith('v='):
@@ -183,7 +180,11 @@ def normalize_youtube_url(url: str) -> str:
                             break
             
             if video_id:
-                # Создаем нормализованный URL
+                # Убираем все лишние символы из video_id
+                # Иногда video_id может содержать дополнительные параметры
+                video_id = video_id.split('&')[0].split('?')[0].split('#')[0]
+                
+                # Создаем нормализованный URL ТОЛЬКО с v параметром
                 normalized_query = urlencode({'v': video_id})
                 normalized_url = urlunparse((
                     'https',
@@ -199,8 +200,8 @@ def normalize_youtube_url(url: str) -> str:
         return url
         
     except Exception:
-        # В случае ошибки возвращаем оригинальный URL
         return url
+
 
 def clean_and_validate_url(url: str) -> Optional[str]:
     """
@@ -219,7 +220,7 @@ def clean_and_validate_url(url: str) -> Optional[str]:
     url = url.strip()
     
     # Убираем кавычки всех типов
-    quotes = ['"', "'", '`', '«', '»', '“', '”']
+    quotes = ['"', "'", '`', '```', '````', '«', '»', '“', '”']
     for quote in quotes:
         if url.startswith(quote) and url.endswith(quote):
             url = url[1:-1].strip()
@@ -243,7 +244,6 @@ def clean_and_validate_url(url: str) -> Optional[str]:
     
     # Дополнительная валидация через urlparse
     try:
-        from urllib.parse import urlparse
         parsed = urlparse(url)
         
         # Должен быть домен
@@ -276,8 +276,6 @@ def normalize_video_url(url: str) -> Optional[str]:
         return None
     
     try:
-        from urllib.parse import urlparse
-        
         parsed = urlparse(cleaned_url)
         domain = parsed.netloc.lower()
         
@@ -342,3 +340,35 @@ def check_video_file_integrity(file_path: Path) -> bool:
         return True
     except Exception:
         return False
+
+def get_date_sort_key(item):
+    val = item.get('last_accessed')
+    if not val:
+        return 0
+    
+    if isinstance(val, (int, float)):
+        return val
+    
+    if isinstance(val, str):
+        try:
+            # Пробуем разные форматы даты
+            formats = [
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%dT%H:%M:%S",
+                "%Y-%m-%d",
+                "%d.%m.%Y %H:%M:%S"
+            ]
+            
+            for fmt in formats:
+                try:
+                    dt = datetime.strptime(val, fmt)
+                    return dt.timestamp()
+                except ValueError:
+                    continue
+            
+            # Если ни один формат не подошел
+            return 0
+        except:
+            return 0
+    
+    return 0

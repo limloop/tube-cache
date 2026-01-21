@@ -12,8 +12,7 @@ import logging
 import subprocess
 from app.config import settings
 from app.utils import get_download_config_for_url, normalize_title
-
-logger = logging.getLogger(__name__)
+from app import logger
 
 class VideoDownloader:
     """Оптимизированный загрузчик видео"""

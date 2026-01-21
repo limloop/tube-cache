@@ -4,17 +4,15 @@
 from fastapi import FastAPI, HTTPException, Query, Request, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-import logging
 from typing import Optional
-
+from datetime import datetime
 from app.config import settings
 from app.database import db
 from app.queue import queue
 from app.storage import storage
-from app.utils import generate_video_hash, get_download_config_for_url, normalize_title, normalize_video_url, check_video_file_integrity
+from app.utils import generate_video_hash, get_download_config_for_url, normalize_title, normalize_video_url, check_video_file_integrity, get_date_sort_key
 from app.models import VideoStatus, VideoRequest, TaskStatus, VideoMetadata, StorageInfo
-
-logger = logging.getLogger(__name__)
+from app import logger
 
 
 # Создаем приложение FastAPI
@@ -272,14 +270,10 @@ async def get_storage_info_detailed():
     videos = await db.get_all_ready_videos()
     
     # Сортируем по дате последнего доступа
-    videos_sorted = sorted(
-        videos, 
-        key=lambda x: x.get('last_accessed') or 0,
-        reverse=True
-    )
+    videos_sorted = sorted(videos, key=get_date_sort_key, reverse=True)
     
     # Топ 10 самых старых видео (кандидаты на удаление)
-    oldest_videos = videos_sorted[-10:] if len(videos_sorted) > 10 else videos_sorted
+    oldest_videos = videos_sorted[:10] if len(videos_sorted) > 10 else videos_sorted
     
     return {
         **info,

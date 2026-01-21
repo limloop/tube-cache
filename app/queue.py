@@ -13,8 +13,7 @@ from app.downloader import VideoDownloader
 from app.database import db
 from app.models import VideoStatus
 from app.storage import storage
-
-logger = logging.getLogger(__name__)
+from app import logger
 
 @dataclass
 class DownloadTask:

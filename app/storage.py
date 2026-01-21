@@ -9,8 +9,7 @@ from pathlib import Path
 from app.config import settings
 from app.database import db
 from app.utils import check_video_file_integrity
-
-logger = logging.getLogger(__name__)
+from app import logger
 
 class StorageManager:
     """Оптимизированный менеджер хранилища"""
@@ -48,8 +47,12 @@ class StorageManager:
 
             while self._is_monitoring:
                 # Проверяем каждые 5 минут
-                await asyncio.sleep(300)  # 5 минут
+                await asyncio.sleep(3600)  # 5 минут
                 check_counter += 1
+
+                # Раз в неделю чистим логи
+                if datetime.now().weekday() == 0:  # Каждый понедельник
+                    await self.cleanup_old_logs(days_to_keep=7)
                 
                 # Каждые 12 проверок (1 час) делаем полную проверку файлов
                 if check_counter % 12 == 0:
@@ -213,6 +216,49 @@ class StorageManager:
         except Exception as e:
             logger.error(f"❌ Ошибка очистки хранилища: {e}")
             return deleted_hashes
+
+    async def cleanup_old_logs(self, days_to_keep: int = 7) -> List[str]:
+        """
+        Очищает старые логи
+        
+        Args:
+            days_to_keep: Сколько дней хранить логи
+            
+        Returns:
+            Список удаленных файлов
+        """
+        deleted = []
+        
+        try:
+            logs_dir = Path(settings.storage.logs_path)
+            
+            if not logs_dir.exists():
+                return deleted
+            
+            current_time = time.time()
+            cutoff_time = current_time - (days_to_keep * 86400)
+            
+            for log_file in logs_dir.glob("*.log"):
+                if log_file.is_file():
+                    # Проверяем возраст файла
+                    file_age = current_time - log_file.stat().st_mtime
+                    
+                    if file_age > cutoff_time:
+                        try:
+                            log_file.unlink()
+                            deleted.append(log_file.name)
+                            logger.debug(f"Удален старый лог: {log_file.name}")
+                        except Exception as e:
+                            logger.warning(f"Не удалось удалить лог {log_file}: {e}")
+            
+            if deleted:
+                logger.info(f"Очищено старых логов: {len(deleted)}")
+            
+            return deleted
+            
+        except Exception as e:
+            logger.error(f"Ошибка очистки логов: {e}")
+            return []
 
     def _find_video_file(self, video_hash: str) -> Optional[Path]:
         """
