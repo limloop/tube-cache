@@ -8,11 +8,11 @@ from typing import Optional, List
 import math
 from pathlib import Path
 import os
-
 from app.database import db
 from app.queue import queue
-from app.utils import normalize_video_url
+from app.utils import normalize_video_url, get_date_sort_key
 from app.models import VideoStatus
+from app import logger
 
 router = APIRouter()
 
@@ -87,6 +87,12 @@ async def list_videos(
             if search_lower in (v.get('title', '').lower() or '') or
                search_lower in (v.get('uploader', '').lower() or '')
         ]
+
+    # Сортировка
+    def sort_key(item):
+        return get_date_sort_key(item, 'created_at')
+
+    all_videos = sorted(all_videos, key=sort_key, reverse=True)
     
     # Пагинация
     page_size = 20
@@ -131,6 +137,7 @@ async def list_videos(
             'last_accessed': video.get('last_accessed'),
             'access_count': video.get('access_count', 0),
             'created_at': video.get('created_at'),
+            'source_url': video.get('source_url', ''),
         })
     
     return templates.TemplateResponse("videos.html", {

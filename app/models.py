@@ -127,6 +127,11 @@ SQL_QUERIES = {
         WHERE status = 'ready' AND file_size IS NOT NULL 
         ORDER BY last_accessed
     """,
+
+    "get_all": """
+        SELECT * FROM videos 
+        ORDER BY last_accessed
+    """,
     
     "get_storage_stats": """
         SELECT 

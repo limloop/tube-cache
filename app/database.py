@@ -185,6 +185,23 @@ class Database:
         except Exception as e:
             logger.error(f"Ошибка получения всех готовых видео: {e}")
             return []
+
+    async def get_all_videos(self) -> List[Dict[str, Any]]:
+        """Оптимизированное получение всех готовых видео"""
+        try:
+            cursor = await self.conn.execute(SQL_QUERIES["get_all"])
+            rows = await cursor.fetchall()
+            await cursor.close()
+            
+            videos = []
+            if rows:
+                columns = [description[0] for description in cursor.description]
+                videos = [dict(zip(columns, row)) for row in rows]
+            
+            return videos
+        except Exception as e:
+            logger.error(f"Ошибка получения всех готовых видео: {e}")
+            return []
     
     async def get_storage_stats(self) -> Dict[str, Any]:
         """Оптимизированное получение статистики"""

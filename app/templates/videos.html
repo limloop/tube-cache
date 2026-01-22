@@ -68,18 +68,30 @@
                 {% for video in videos %}
                 <tr>
                     <td>
-                        <strong>{{ video.title|truncate(40) }}</strong>
+                        <strong>{{ video.title|truncate(40) if video.title else video.source_url }}</strong>
                         <br>
                         <small class="text-muted">{{ video.short_hash }}</small>
+                        {% if not video.title %}
+                        <br>
+                        <small class="text-muted"><i>Нет названия</i></small>
+                        {% endif %}
                     </td>
-                    <td>{{ video.uploader|truncate(20) }}</td>
-                    <td>{{ video.duration_str }}</td>
-                    <td>{{ video.file_size }}</td>
+                    <td>
+                        {{ video.uploader|truncate(20) if video.uploader else '<small class="text-muted"><i>Неизвестно</i></small>'|safe }}
+                    </td>
+                    <td>
+                        {{ video.duration_str if video.duration_str else '<span class="text-muted">—</span>'|safe }}
+                    </td>
+                    <td>
+                        {{ video.file_size if video.file_size else '<span class="text-muted">—</span>'|safe }}
+                    </td>
                     <td>
                         <span class="badge {% if video.status == 'ready' %}bg-success
                                           {% elif video.status == 'downloading' %}bg-info
                                           {% elif video.status == 'pending' %}bg-warning
-                                          {% else %}bg-danger{% endif %} status-badge">
+                                          {% elif video.status == 'failed' %}bg-danger
+                                          {% elif video.status == 'deleted' %}bg-secondary
+                                          {% else %}bg-dark{% endif %} status-badge">
                             {{ video.status_text }}
                         </span>
                     </td>
@@ -92,9 +104,28 @@
                             <i class="bi bi-cast"></i>
                         </a>
                         {% endif %}
+                        
+                        <!-- Кнопка информации (показываем всегда если есть хеш) -->
                         <a href="/info/{{ video.hash }}" class="btn btn-sm btn-outline-info" title="Информация">
                             <i class="bi bi-info-circle"></i>
                         </a>
+                        
+                        <!-- Кнопка повторной загрузки для failed/deleted или если нет метаданных -->
+                        {% if video.status in ['failed', 'deleted'] or not video.title %}
+                        <form action="/download" method="post" style="display: inline;">
+                            <input type="hidden" name="url" value="{{ video.source_url }}">
+                            <button type="submit" class="btn btn-sm btn-warning" title="Повторная загрузка">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                        
+                        <!-- Для pending/downloading можно показать статус в очереди -->
+                        {% if video.status in ['pending', 'downloading'] %}
+                        <span class="badge bg-secondary" title="В процессе загрузки">
+                            <i class="bi bi-hourglass-split"></i>
+                        </span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}

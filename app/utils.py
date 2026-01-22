@@ -6,6 +6,7 @@ import hashlib
 import subprocess
 import os
 from pathlib import Path
+from datetime import datetime
 from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
 from typing import Tuple, Optional
 from app.config import settings
@@ -341,8 +342,9 @@ def check_video_file_integrity(file_path: Path) -> bool:
     except Exception:
         return False
 
-def get_date_sort_key(item):
-    val = item.get('last_accessed')
+
+def get_date_sort_key(item, key):
+    val = item.get(key)
     if not val:
         return 0
     
@@ -353,10 +355,9 @@ def get_date_sort_key(item):
         try:
             # Пробуем разные форматы даты
             formats = [
-                "%Y-%m-%d %H:%M:%S",
-                "%Y-%m-%dT%H:%M:%S",
-                "%Y-%m-%d",
-                "%d.%m.%Y %H:%M:%S"
+                # С пробелом вместо T
+                "%Y-%m-%d %H:%M:%S.%f",          # 2026-01-15 01:31:48.301245
+                "%Y-%m-%d %H:%M:%S",             # 2026-01-15 01:31:48
             ]
             
             for fmt in formats:

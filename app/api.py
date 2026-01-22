@@ -273,7 +273,10 @@ async def get_storage_info_detailed():
     videos = await db.get_all_ready_videos()
     
     # Сортируем по дате последнего доступа
-    videos_sorted = sorted(videos, key=get_date_sort_key, reverse=True)
+    def sort_key(item):
+        return get_date_sort_key(item, 'last_accessed')
+
+    videos_sorted = sorted(videos, key=sort_key, reverse=True)
     
     # Топ 10 самых старых видео (кандидаты на удаление)
     oldest_videos = videos_sorted[:10] if len(videos_sorted) > 10 else videos_sorted
