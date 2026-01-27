@@ -17,8 +17,52 @@ from datetime import datetime
 
 class StorageConfig(BaseModel):
     """Конфигурация хранилища"""
-    base_path: str = Field(default="./data", description="Базовый путь для всех данных")
-    max_size_gb: int = Field(default=50, ge=1, description="Максимальный размер в GB")
+    base_path: str = Field(
+        default="./data",
+        description="Базовый путь для всех данных"
+    )
+    max_size_gb: int = Field(
+        default=50,
+        ge=1,
+        description="Максимальный размер в GB"
+    )
+    monitoring_interval: int = Field(
+        default=360,
+        ge=60,
+        description="Интервал мониторинга хранилища в секундах (минимум 60)"
+    )
+    
+    cleanup_threshold: int = Field(
+        default=90,
+        ge=50,
+        le=100,
+        description="Порог заполнения для запуска очистки в процентах (50-100%)"
+    )
+    
+    target_free_space: int = Field(
+        default=60,
+        ge=10,
+        le=90,
+        description="Целевой процент свободного места после очистки (10-90%)"
+    )
+    
+    log_retention_days: int = Field(
+        default=7,
+        ge=1,
+        description="Количество дней хранения лог-файлов"
+    )
+    
+    log_check_interval: int = Field(
+        default=14400,
+        ge=3600,
+        description="Интервал проверки логов для очистки в секундах (минимум 3600)"
+    )
+    
+    integrity_check_interval: int = Field(
+        default=3600,
+        ge=300,
+        description="Интервал проверки целостности видеофайлов в секундах (минимум 300)"
+    )
     
     @property
     def videos_path(self) -> str:

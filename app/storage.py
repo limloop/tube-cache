@@ -1,315 +1,323 @@
-"""
-Оптимизированное управление хранилищем
-"""
 import os
 import asyncio
-import logging
-from typing import List, Dict, Any, Optional
+import time
+import re
+from datetime import datetime
 from pathlib import Path
+from typing import List, Dict, Any, Optional
 from app.config import settings
 from app.database import db
 from app.utils import check_video_file_integrity
 from app import logger
 
 class StorageManager:
-    """Оптимизированный менеджер хранилища"""
+    """
+    Управление хранилищем видеофайлов и их обслуживанием.
+    
+    Основные функции:
+    - Мониторинг заполненности хранилища
+    - Автоматическая очистка старых видео при нехватке места
+    - Проверка целостности видеофайлов
+    - Очистка старых логов
+    """
+    
+    # Поддерживаемые видеоформаты для поиска файлов
+    VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mkv', '.avi', '.mov', '.flv', '.wmv']
     
     def __init__(self):
+        """Инициализация менеджера хранилища."""
         self.videos_path = Path(settings.storage.videos_path)
         self.max_size_bytes = settings.storage.max_size_gb * (1024 ** 3)
+        
+        # Настройки из конфигурации
+        self.monitoring_interval = settings.storage.monitoring_interval  # секунды
+        self.storage_cleanup_threshold = settings.storage.cleanup_threshold  # процент заполнения
+        self.target_free_space = settings.storage.target_free_space  # процент свободного места после очистки
+        self.log_retention_days = settings.storage.log_retention_days
+        self.log_check_interval = settings.storage.log_check_interval
+        self.integrity_check_interval = settings.storage.integrity_check_interval  # секунды
+        
+        # Время последних операций (хранится только в памяти)
+        self._last_log_cleanup = 0
+        self._last_integrity_check = 0
         self._monitor_task = None
         self._is_monitoring = False
     
     async def start_monitoring(self):
-        """Запускает периодический мониторинг хранилища"""
+        """Запуск фонового мониторинга хранилища."""
         if self._is_monitoring:
             return
-        
+            
         self._is_monitoring = True
-        self._monitor_task = asyncio.create_task(self._monitor_storage())
-        logger.info("📊 Мониторинг хранилища запущен")
+        self._monitor_task = asyncio.create_task(self._monitor_loop())
+        logger.info("Мониторинг хранилища запущен")
     
     async def stop_monitoring(self):
-        """Останавливает мониторинг хранилища"""
+        """Остановка фонового мониторинга."""
         self._is_monitoring = False
+        
         if self._monitor_task:
             self._monitor_task.cancel()
             try:
                 await self._monitor_task
             except asyncio.CancelledError:
                 pass
-        logger.info("📊 Мониторинг хранилища остановлен")
+            
+        logger.info("Мониторинг хранилища остановлен")
     
-    async def _monitor_storage(self):
-        """Периодически проверяет состояние хранилища"""
+    async def _monitor_loop(self):
+        """
+        Основной цикл мониторинга.
+        
+        Выполняет периодические проверки:
+        1. Заполненность хранилища
+        2. Очистку старых логов (раз в сутки)
+        3. Проверку целостности файлов (раз в указанный интервал)
+        """
+        logger.debug("Запущен цикл мониторинга хранилища")
+        
         try:
-            check_counter = 0
-
             while self._is_monitoring:
-                # Проверяем каждые 5 минут
-                await asyncio.sleep(3600)  # 5 минут
-                check_counter += 1
-
-                # Раз в неделю чистим логи
-                if datetime.now().weekday() == 0:  # Каждый понедельник
-                    await self.cleanup_old_logs(days_to_keep=7)
-                
-                # Каждые 12 проверок (1 час) делаем полную проверку файлов
-                if check_counter % 12 == 0:
-                    logger.info("🚨 Запуск полной проверки целостности файлов...")
-                    await self._check_all_video_files()
-
-                info = await self.get_storage_info()
-                used_percent = info['used_percent']
-                
-                # Если хранилище заполнено более чем на 95%, запускаем очистку
-                if used_percent > 95:
-                    logger.warning(f"📊 Автоматическая проверка: хранилище заполнено на {used_percent:.1f}%")
-                    
-                    # Запускаем очистку в фоне (не блокируем мониторинг)
-                    asyncio.create_task(self.cleanup_old_videos(aggressive=True))
+                await asyncio.sleep(self.monitoring_interval)
+                await self._perform_monitoring_checks()
                 
         except asyncio.CancelledError:
-            pass
+            logger.debug("Цикл мониторинга остановлен")
         except Exception as e:
-            logger.error(f"Ошибка в мониторе хранилища: {e}")
-
-    async def _check_all_video_files(self) -> List[str]:
-        """
-        Проверяет все видеофайлы на целостность
+            logger.error(f"Ошибка в цикле мониторинга: {e}")
+        finally:
+            self._is_monitoring = False
+    
+    async def _perform_monitoring_checks(self):
+        """Выполнение всех проверок состояния хранилища."""
+        current_time = time.time()
         
-        Returns:
-            Список поврежденных файлов
-        """
-        damaged = []
+        # Проверка заполненности хранилища
+        storage_info = await self.get_storage_info()
+        if storage_info['used_percent'] >= self.storage_cleanup_threshold:
+            logger.warning(f"Хранилище заполнено на {storage_info['used_percent']}%, запуск очистки")
+            await self.cleanup_old_videos()
         
-        try:
-            videos = await db.get_all_ready_videos()
-            
-            for video in videos:
-                video_hash = video['hash']
-                file_path = self._find_video_file(video_hash)
-                
-                if file_path and file_path.exists():
-                    if not check_video_file_integrity(file_path):
-                        logger.warning(f"Найден поврежденный файл: {video_hash[:12]}...")
-                        damaged.append(video_hash)
-                        
-                        # Удаляем файл и обновляем БД
-                        try:
-                            file_path.unlink()
-                            await db.mark_video_deleted(video_hash)
-                        except Exception as e:
-                            logger.error(f"Не удалось удалить поврежденный файл {video_hash}: {e}")
-            
-            if damaged:
-                logger.warning(f"Обнаружено поврежденных файлов: {len(damaged)}")
-            else:
-                logger.info("Все файлы в порядке")
-                
-            return damaged
-            
-        except Exception as e:
-            logger.error(f"Ошибка проверки файлов: {e}")
-            return []
-
-    async def cleanup_old_videos(self, aggressive: bool = False) -> List[str]:
-        """
-        Оптимизированная очистка старых видео
+        # Ежесуточная очистка логов
+        if current_time - self._last_log_cleanup > self.log_check_interval:
+            await self.cleanup_old_logs()
+            self._last_log_cleanup = current_time
         
-        Args:
-            aggressive: Если True, удаляет больше видео для создания запаса места
-            
-        Returns:
-            Список хешей удаленных видео
+        # Периодическая проверка целостности
+        if current_time - self._last_integrity_check > self.integrity_check_interval:
+            await self.check_all_video_integrity()
+            self._last_integrity_check = current_time
+    
+    async def cleanup_old_videos(self) -> List[str]:
+        """
+        Очистка самых старых видеофайлов для освобождения места.
+        
+        Возвращает список хешей удаленных видео.
         """
         deleted_hashes = []
         
         try:
-            # Получаем все готовые видео отсортированные по last_accessed
+            # Получаем видео отсортированные по времени последнего доступа
             videos = await db.get_all_ready_videos()
+            videos.sort(key=lambda x: x.get('last_accessed', 0) or 0)
             
-            if not videos:
+            current_size = sum(v.get('file_size', 0) for v in videos)
+            target_size = self.max_size_bytes * (1 - self.target_free_space / 100)
+            
+            # Если места достаточно - выходим
+            if current_size <= target_size:
                 return deleted_hashes
             
-            # Вычисляем общий размер
-            total_size = sum(v.get('file_size', 0) for v in videos)
-            max_size = self.max_size_bytes
-            
-            logger.info(f"🧹 Начало очистки: {len(videos)} видео, {total_size/1024**3:.2f} GB")
-            logger.info(f"   Лимит: {max_size/1024**3:.2f} GB")
-            
-            # Определяем целевой размер (сколько хотим освободить)
-            if aggressive:
-                # Агрессивная очистка: оставляем 50% свободного места
-                target_free_percent = 50
-            else:
-                # Обычная очистка: оставляем 20% свободного места
-                target_free_percent = 20
-            
-            target_size = max_size * (1 - target_free_percent / 100)
-            
-            # Если уже ниже целевого размера - выходим
-            if total_size <= target_size:
-                logger.info(f"   Места достаточно, очистка не требуется")
-                return deleted_hashes
-            
-            logger.info(f"   Целевой размер после очистки: {target_size/1024**3:.2f} GB")
-            
-            # Удаляем самые старые видео
+            # Удаляем старые видео пока не освободим достаточно места
             for video in videos:
-                if total_size <= target_size:
+                if current_size <= target_size:
                     break
-                
+                    
                 video_hash = video['hash']
                 file_size = video.get('file_size', 0)
                 
-                # Пропускаем видео без размера
-                if not file_size or file_size <= 0:
+                if not file_size:
                     continue
                 
-                # Ищем файл
+                file_path = self._find_video_file(video_hash)
+                if file_path and file_path.exists():
+                    try:
+                        file_path.unlink()
+                        await db.mark_video_deleted(video_hash)
+                        
+                        current_size -= file_size
+                        deleted_hashes.append(video_hash)
+                        
+                        logger.info(f"Удалено старое видео: {video_hash[:12]} ({file_size:,} bytes)")
+                        
+                    except Exception as e:
+                        logger.error(f"Ошибка удаления видео {video_hash[:12]}: {e}")
+            
+            if deleted_hashes:
+                logger.info(f"Очистка завершена: удалено {len(deleted_hashes)} видео")
+                
+        except Exception as e:
+            logger.error(f"Ошибка очистки видео: {e}")
+        
+        return deleted_hashes
+    
+    async def cleanup_old_logs(self) -> List[str]:
+        """
+        Удаление лог-файлов старше указанного количества дней.
+        
+        Анализирует дату из имени файла (формат: имя_ГГГГ-ММ-ДД.log)
+        или использует дату изменения файла.
+        """
+        deleted_files = []
+        logs_dir = Path(settings.storage.logs_path)
+        
+        if not logs_dir.exists():
+            return deleted_files
+        
+        cutoff_date = datetime.now().timestamp() - (self.log_retention_days * self.log_check_interval)
+        
+        for log_file in logs_dir.glob("*.log"):
+            if not log_file.is_file():
+                continue
+            
+            try:
+                # Пытаемся определить дату файла
+                file_date = self._get_file_date(log_file)
+                
+                if file_date.timestamp() < cutoff_date:
+                    log_file.unlink(missing_ok=True)
+                    deleted_files.append(log_file.name)
+                    
+            except Exception as e:
+                logger.warning(f"Не удалось обработать файл {log_file.name}: {e}")
+        
+        if deleted_files:
+            logger.info(f"Очищено логов: {len(deleted_files)} файлов")
+        
+        return deleted_files
+    
+    def _get_file_date(self, file_path: Path) -> datetime:
+        """
+        Определяет дату файла.
+        
+        Сначала пытается извлечь дату из имени файла,
+        затем использует дату изменения файла.
+        """
+        # Извлечение даты из имени файла
+        date_match = re.search(r'(\d{4})-(\d{2})-(\d{2})', file_path.stem)
+        if date_match:
+            year, month, day = map(int, date_match.groups())
+            return datetime(year, month, day)
+        
+        # Использование даты изменения файла
+        return datetime.fromtimestamp(file_path.stat().st_mtime)
+    
+    async def check_all_video_integrity(self) -> List[str]:
+        """
+        Проверка целостности всех видеофайлов в хранилище.
+        
+        Возвращает список хешей поврежденных файлов.
+        """
+        damaged_files = []
+        
+        try:
+            videos = await db.get_all_ready_videos()
+            
+            for video in videos:
+                if not self._is_monitoring:
+                    break
+                    
+                video_hash = video['hash']
                 file_path = self._find_video_file(video_hash)
                 
                 if file_path and file_path.exists():
                     try:
-                        # ПРОВЕРКА: Если файл поврежден - удаляем в любом случае
                         if not check_video_file_integrity(file_path):
-                            logger.warning(f"Обнаружен поврежденный файл: {video_hash[:12]}...")
-                            # Помечаем как удаленный в БД
+                            damaged_files.append(video_hash)
+                            logger.warning(f"Обнаружен поврежденный файл: {video_hash[:12]}")
+                            
+                            # Автоматическое удаление поврежденного файла
+                            file_path.unlink(missing_ok=True)
                             await db.mark_video_deleted(video_hash)
-                            file_path.unlink()
-                            total_size -= file_size
-                            deleted_hashes.append(video_hash)
-                            continue
-
-                        # Проверяем, не является ли видео "популярным"
-                        # Не удаляем видео, к которым недавно обращались
-                        last_accessed = video.get('last_accessed')
-                        access_count = video.get('access_count', 0)
-                        
-                        # Если видео смотрели много раз или недавно - пропускаем
-                        if (access_count > 10) or (last_accessed and aggressive == False):
-                            logger.debug(f"   Пропускаем популярное видео: {video_hash[:12]}...")
-                            continue
-                        
-                        # Удаляем файл
-                        file_path.unlink()
-                        
-                        # Обновляем БД
-                        await db.mark_video_deleted(video_hash)
-                        
-                        # Обновляем счетчики
-                        total_size -= file_size
-                        deleted_hashes.append(video_hash)
-                        
-                        logger.info(f"   Удалено: {video_hash[:12]}... ({file_size/1024**2:.1f} MB)")
-                        
+                            
                     except Exception as e:
-                        logger.error(f"   Ошибка удаления файла {video_hash[:12]}...: {e}")
+                        logger.error(f"Ошибка проверки файла {video_hash[:12]}: {e}")
             
-            logger.info(f"✅ Очистка завершена: удалено {len(deleted_hashes)} видео")
-            logger.info(f"   Осталось места: {(max_size - total_size)/1024**3:.2f} GB")
-            
-            return deleted_hashes
+            logger.info(f"Проверка целостности: {len(videos)} проверено, {len(damaged_files)} повреждено")
             
         except Exception as e:
-            logger.error(f"❌ Ошибка очистки хранилища: {e}")
-            return deleted_hashes
-
-    async def cleanup_old_logs(self, days_to_keep: int = 7) -> List[str]:
-        """
-        Очищает старые логи
+            logger.error(f"Ошибка проверки целостности: {e}")
         
-        Args:
-            days_to_keep: Сколько дней хранить логи
-            
-        Returns:
-            Список удаленных файлов
-        """
-        deleted = []
-        
-        try:
-            logs_dir = Path(settings.storage.logs_path)
-            
-            if not logs_dir.exists():
-                return deleted
-            
-            current_time = time.time()
-            cutoff_time = current_time - (days_to_keep * 86400)
-            
-            for log_file in logs_dir.glob("*.log"):
-                if log_file.is_file():
-                    # Проверяем возраст файла
-                    file_age = current_time - log_file.stat().st_mtime
-                    
-                    if file_age > cutoff_time:
-                        try:
-                            log_file.unlink()
-                            deleted.append(log_file.name)
-                            logger.debug(f"Удален старый лог: {log_file.name}")
-                        except Exception as e:
-                            logger.warning(f"Не удалось удалить лог {log_file}: {e}")
-            
-            if deleted:
-                logger.info(f"Очищено старых логов: {len(deleted)}")
-            
-            return deleted
-            
-        except Exception as e:
-            logger.error(f"Ошибка очистки логов: {e}")
-            return []
-
+        return damaged_files
+    
     def _find_video_file(self, video_hash: str) -> Optional[Path]:
         """
-        Быстрый поиск файла видео по хешу
+        Поиск видеофайла по хешу.
+        
+        Проверяет файлы с различными расширениями видео.
         """
-        # Ищем файл с любым расширением
-        for file_path in self.videos_path.glob(f"{video_hash}.*"):
-            if file_path.is_file():
+        for ext in self.VIDEO_EXTENSIONS:
+            file_path = self.videos_path / f"{video_hash}{ext}"
+            if file_path.exists():
                 return file_path
+        
         return None
     
     async def get_storage_info(self) -> Dict[str, Any]:
         """
-        Быстрое получение информации о хранилище
+        Получение текущей статистики хранилища.
+        
+        Возвращает словарь с информацией о размере, заполнении
+        и количестве файлов.
         """
         try:
             stats = await db.get_storage_stats()
-            
-            total_size = stats.get('total_size', 0)
-            video_count = stats.get('video_count', 0)
+            used_bytes = stats.get('total_size', 0)
             
             used_percent = 0
             if self.max_size_bytes > 0:
-                used_percent = min(100, (total_size / self.max_size_bytes) * 100)
+                used_percent = (used_bytes / self.max_size_bytes) * 100
             
             return {
-                'total_size_bytes': total_size,
+                'total_size_bytes': used_bytes,
                 'max_size_bytes': self.max_size_bytes,
-                'video_count': video_count,
-                'used_percent': round(used_percent, 2)
+                'video_count': stats.get('video_count', 0),
+                'used_percent': round(used_percent, 1),
+                'free_bytes': max(0, self.max_size_bytes - used_bytes),
+                'free_percent': round(max(0, 100 - used_percent), 1)
             }
             
         except Exception as e:
-            logger.error(f"Ошибка получения информации о хранилище: {e}")
-            return {
-                'total_size_bytes': 0,
-                'max_size_bytes': self.max_size_bytes,
-                'video_count': 0,
-                'used_percent': 0
-            }
+            logger.error(f"Ошибка получения статистики хранилища: {e}")
+            return self._get_empty_storage_info()
+    
+    def _get_empty_storage_info(self) -> Dict[str, Any]:
+        """Возвращает пустую статистику при ошибке."""
+        return {
+            'total_size_bytes': 0,
+            'max_size_bytes': self.max_size_bytes,
+            'video_count': 0,
+            'used_percent': 0,
+            'free_bytes': self.max_size_bytes,
+            'free_percent': 100
+        }
     
     async def find_video_path(self, video_hash: str) -> Optional[Path]:
         """
-        Быстрый поиск пути к видеофайлу
+        Поиск пути к видеофайлу с проверкой доступности.
+        
+        Возвращает Path если файл существует и доступен для чтения.
         """
         file_path = self._find_video_file(video_hash)
         
-        if file_path and file_path.exists():
+        if file_path and file_path.exists() and os.access(file_path, os.R_OK):
             return file_path
         
         return None
+    
+    def is_monitoring_active(self) -> bool:
+        """Проверка активности мониторинга."""
+        return self._is_monitoring
 
 # Глобальный экземпляр менеджера хранилища
 storage = StorageManager()
