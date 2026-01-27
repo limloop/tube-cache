@@ -6,11 +6,12 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from datetime import datetime
+from pathlib import Path
 from app.config import settings
 from app.database import db
 from app.queue import queue
 from app.storage import storage
-from app.utils import generate_video_hash, get_download_config_for_url, normalize_title, normalize_video_url, check_video_file_integrity, get_date_sort_key
+from app.utils import generate_video_hash, get_download_config_for_url, normalize_title, normalize_video_url, check_video_file_integrity, check_video_file_integrity_extended, get_date_sort_key
 from app.models import VideoStatus, VideoRequest, TaskStatus, VideoMetadata, StorageInfo
 from app.webui import router as webui_router
 from app import logger
@@ -76,108 +77,209 @@ async def request_video(url: str = Query(..., description="URL видео")):
     """
     Запрашивает скачивание видео
     """
-    # Нормализуем и проверяем URL
-    normalized_url = normalize_video_url(url)
-    
-    if normalized_url is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Некорректный URL. Укажите валидную ссылку на видео."
-        )
-    
-    if url != normalized_url:
-        logger.debug(f"Нормализация URL: {url} -> {normalized_url}")
+    try:
+        # Нормализуем URL
+        normalized_url = normalize_video_url(url)
+        if not normalized_url:
+            raise HTTPException(status_code=400, detail="Некорректный URL")
+        
         url = normalized_url
-    
-    # Получаем параметры качества для генерации хеша
-    format_spec, _ = get_download_config_for_url(url)
-    
-    # Генерируем 64-символьный хеш
-    video_hash = generate_video_hash(url, format_spec)
-    
-    # Проверяем наличие в базе
-    video = await db.get_video(video_hash)
-    
-    if video:
+        
+        # Генерируем хеш
+        format_spec, _ = get_download_config_for_url(url)
+        video_hash = generate_video_hash(url, format_spec)
+        
+        # Проверяем в БД
+        video = await db.get_video(video_hash)
+        
+        if not video:
+            # Новая задача - создаём запись и добавляем в очередь
+            await db.create_video(video_hash, url)
+            await cleanup_temp_files(video_hash)
+            
+            added = await queue.add_task(video_hash, url)
+            
+            if not added:
+                position = await queue.get_queue_position(video_hash)
+                message = f"Видео уже в очереди"
+                if position is not None:
+                    message += f", позиция: {position + 1}"
+                
+                return TaskStatus(
+                    hash=video_hash,
+                    status=VideoStatus.PENDING,
+                    message=message
+                )
+            
+            return TaskStatus(
+                hash=video_hash,
+                status=VideoStatus.PENDING,
+                message="Видео добавлено в очередь на загрузку"
+            )
+        
+        # Проверяем статус
         status = VideoStatus(video['status'])
         
         if status == VideoStatus.READY:
-            # ПРОВЕРКА: Убедимся что файл действительно существует и целый
+            # Проверяем целостность файла
             file_path = await storage.find_video_path(video_hash)
             
             if not file_path or not file_path.exists():
-                # Файл потерян
-                logger.warning(f"Файл потерян для готового видео: {video_hash[:12]}...")
+                logger.error(f"Файл отсутствует для готового видео: {video_hash}")
                 await db.mark_video_deleted(video_hash)
-                # Продолжаем как новую задачу
+                
+                # Пересоздаём задачу
+                await db.update_status(video_hash, VideoStatus.PENDING)
+                await cleanup_temp_files(video_hash)
+                await queue.add_task(video_hash, video['source_url'])
+                
+                return TaskStatus(
+                    hash=video_hash,
+                    status=VideoStatus.PENDING,
+                    message="Файл потерян, перезапуск загрузки"
+                )
             
-            elif not check_video_file_integrity(file_path):
-                # Файл поврежден
-                logger.warning(f"Поврежденный файл для готового видео: {video_hash[:12]}...")
+            # Проверяем целостность
+            integrity_result = await check_video_file_integrity_extended(file_path, video.get('file_size'))
+            
+            if not integrity_result['valid']:
+                logger.error(f"Файл повреждён: {video_hash}")
+                
                 try:
                     file_path.unlink()
                 except:
                     pass
-                await db.mark_video_deleted(video_hash)
-                # Продолжаем как новую задачу
+                
+                await db.update_status(video_hash, VideoStatus.FAILED)
+                
+                # Если у видео были попытки, считаем их
+                retry_count = video.get('retry_count', 0)
+                if retry_count < 3:
+                    await db.update_status(video_hash, VideoStatus.PENDING)
+                    await cleanup_temp_files(video_hash)
+                    await queue.add_task(video_hash, video['source_url'])
+                    
+                    return TaskStatus(
+                        hash=video_hash,
+                        status=VideoStatus.PENDING,
+                        message=f"Файл повреждён, повторная попытка ({retry_count + 1}/3)"
+                    )
+                else:
+                    return TaskStatus(
+                        hash=video_hash,
+                        status=VideoStatus.FAILED,
+                        message="Видео повреждено и не может быть восстановлено"
+                    )
             
-            else:
-                # Файл в порядке, возвращаем ссылку
-                return TaskStatus(
-                    hash=video_hash,
-                    status=status,
-                    stream_url=f"/stream/{video_hash}",
-                    message="Видео готово к просмотру"
-                )
+            # Всё в порядке
+            return TaskStatus(
+                hash=video_hash,
+                status=VideoStatus.READY,
+                stream_url=f"/stream/{video_hash}",
+                message="Видео готово к просмотру",
+                file_size=video.get('file_size'),
+                duration=video.get('duration')
+            )
         
         elif status == VideoStatus.FAILED:
-            # Предыдущая загрузка провалилась, пробуем заново
-            logger.info(f"Перезапуск проваленной загрузки: {video_hash[:12]}...")
-            await db.update_status(video_hash, VideoStatus.PENDING)
-            # Продолжаем как новую задачу
+            # Проверяем, можно ли перезапустить
+            retry_count = video.get('retry_count', 0)
+            if retry_count < 3:
+                await db.update_status(video_hash, VideoStatus.PENDING)
+                await cleanup_temp_files(video_hash)
+                await queue.add_task(video_hash, video['source_url'])
+                
+                return TaskStatus(
+                    hash=video_hash,
+                    status=VideoStatus.PENDING,
+                    message=f"Перезапуск проваленной загрузки ({retry_count + 1}/3)"
+                )
+            else:
+                return TaskStatus(
+                    hash=video_hash,
+                    status=VideoStatus.FAILED,
+                    message="Загрузка провалилась после 3 попыток"
+                )
         
-        elif status in [VideoStatus.PENDING, VideoStatus.DOWNLOADING]:
+        elif status == VideoStatus.PENDING:
             # Проверяем, есть ли задача в очереди
             position = await queue.get_queue_position(video_hash)
             
             if position is None:
-                # Задача потерялась, перезапускаем
-                logger.warning(f"Задача потеряна, перезапуск: {video_hash[:12]}... (статус: {status})")
+                # Задача потерялась, пересоздаём
+                logger.warning(f"Задача потеряна, пересоздаём: {video_hash[:12]}")
+                await cleanup_temp_files(video_hash)
+                await queue.add_task(video_hash, video['source_url'])
+                position = await queue.get_queue_position(video_hash)
+            
+            message = "Видео в очереди на загрузку"
+            if position is not None:
+                message += f", позиция: {position + 1}"
+            
+            return TaskStatus(
+                hash=video_hash,
+                status=VideoStatus.PENDING,
+                message=message
+            )
+        
+        elif status == VideoStatus.DOWNLOADING:
+            # Проверяем, активна ли задача в очереди
+            queue_info = await queue.get_queue_info()
+            is_active = any(task['hash'].startswith(video_hash[:12]) 
+                          for task in queue_info.get('active_tasks_list', []))
+            
+            if not is_active:
+                # Задача не активна, пересоздаём
+                logger.warning(f"Задача DOWNLOADING но не активна: {video_hash[:12]}")
                 await db.update_status(video_hash, VideoStatus.PENDING)
-            else:
-                # Задача в очереди, возвращаем текущий статус
+                await cleanup_temp_files(video_hash)
+                await queue.add_task(video_hash, video['source_url'])
+                
                 return TaskStatus(
                     hash=video_hash,
-                    status=status,
-                    message=f"Видео в очереди на загрузку" + 
-                           (f", позиция: {position}" if position else "")
+                    status=VideoStatus.PENDING,
+                    message="Задача перезапущена"
                 )
-    
-    # Создаем новую запись в базе (если еще не существует)
-    if not video:
-        await db.create_video(video_hash, url)
-    else:
-        # Обновляем статус на PENDING если нужно
-        await db.update_status(video_hash, VideoStatus.PENDING)
-    
-    # Добавляем в очередь
-    added = await queue.add_task(video_hash, url)
-    
-    if not added:
-        # Не удалось добавить в очередь (уже есть или другая ошибка)
-        current_position = await queue.get_queue_position(video_hash)
-        return TaskStatus(
-            hash=video_hash,
-            status=VideoStatus.PENDING,
-            message=f"Видео уже в очереди" + 
-                   (f", позиция: {current_position}" if current_position is not None else "")
+            
+            return TaskStatus(
+                hash=video_hash,
+                status=VideoStatus.DOWNLOADING,
+                message="Видео загружается"
+            )
+        
+        else:
+            # Неизвестный статус
+            logger.warning(f"Неизвестный статус {status} для видео {video_hash}")
+            await db.update_status(video_hash, VideoStatus.PENDING)
+            await cleanup_temp_files(video_hash)
+            await queue.add_task(video_hash, video['source_url'])
+            
+            return TaskStatus(
+                hash=video_hash,
+                status=VideoStatus.PENDING,
+                message="Неизвестный статус, перезапуск"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка при обработке запроса видео {url}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Внутренняя ошибка сервера"
         )
-    
-    return TaskStatus(
-        hash=video_hash,
-        status=VideoStatus.PENDING,
-        message="Видео добавлено в очередь на загрузку"
-    )
+
+async def cleanup_temp_files(video_hash: str):
+    """Очищает только временные файлы"""
+    try:
+        temp_dir = Path(settings.storage.temp_path)
+        for file in temp_dir.glob(f"*{video_hash}*"):
+            try:
+                file.unlink()
+            except:
+                pass
+    except Exception as e:
+        logger.warning(f"Ошибка очистки временных файлов {video_hash}: {e}")
 
 @app.get("/stream/{video_hash}")
 async def stream_video(video_hash: str, request: Request):

@@ -4,12 +4,14 @@
 import re
 import hashlib
 import subprocess
+import asyncio
 import os
 from pathlib import Path
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
-from typing import Tuple, Optional
+from typing import Tuple, Dict, Any, Optional
 from app.config import settings
+from app import logger
 
 # Предкомпилированные регулярные выражения для производительности
 _UNSAFE_CHARS_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1F\x7F]')
@@ -298,50 +300,307 @@ def normalize_video_url(url: str) -> Optional[str]:
 
 def check_video_file_integrity(file_path: Path) -> bool:
     """
-    Проверяет целостность видеофайла с помощью ffprobe
-    
-    Args:
-        file_path: Путь к файлу
-        
-    Returns:
-        True если файл валиден, False если поврежден
+    Простая проверка целостности файла
     """
     try:
         if not file_path.exists():
             return False
         
-        # Быстрая проверка размера
         file_size = file_path.stat().st_size
-        if file_size < 1024 * 100:  # Меньше 100KB - точно битый
+        if file_size == 0:
             return False
         
-        # Проверка через ffprobe
-        cmd = [
-            'ffprobe',
-            '-v', 'error',
-            '-select_streams', 'v:0',
-            '-count_frames',
-            '-show_entries', 'stream=codec_type',
-            '-of', 'csv=p=0',
-            str(file_path)
-        ]
+        # Минимальный размер для видео/аудио
+        if file_size < 1024 * 10:  # 10KB
+            return False
         
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=5  # Таймаут 5 секунд
-        )
+        # Пробуем прочитать файл
+        with open(file_path, 'rb') as f:
+            header = f.read(1024)
+            if len(header) == 0:
+                return False
+            
+            # Проверяем что файл не полностью состоит из нулей
+            if all(b == 0 for b in header[:100]):
+                return False
         
-        # Если ffprobe завершился успешно и нашел видеопоток
-        return result.returncode == 0 and 'video' in result.stdout
-        
-    except subprocess.TimeoutExpired:
-        # Файл слишком сложный для быстрой проверки, считаем валидным
         return True
+        
     except Exception:
         return False
 
+async def check_video_file_integrity_extended(
+    file_path: Path, 
+    expected_size: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Расширенная проверка целостности видеофайла
+    
+    Args:
+        file_path: Путь к файлу
+        expected_size: Ожидаемый размер файла в байтах (опционально)
+    
+    Returns:
+        Dict с результатами проверки:
+        {
+            'valid': bool,
+            'reason': str (если not valid),
+            'file_size': int,
+            'has_video_stream': bool,
+            'has_audio_stream': bool,
+            'duration': Optional[float]
+        }
+    """
+    try:
+        # 1. Проверка существования файла
+        if not file_path.exists():
+            return {
+                'valid': False,
+                'reason': 'Файл не существует',
+                'file_size': 0,
+                'has_video_stream': False,
+                'has_audio_stream': False,
+                'duration': None
+            }
+        
+        # 2. Проверка размера файла
+        file_size = file_path.stat().st_size
+        
+        if file_size == 0:
+            return {
+                'valid': False,
+                'reason': 'Файл пустой (0 байт)',
+                'file_size': 0,
+                'has_video_stream': False,
+                'has_audio_stream': False,
+                'duration': None
+            }
+        
+        # 3. Проверка минимального размера
+        MIN_SIZE = 1024 * 10  # 10KB минимальный размер для видео/аудио
+        if file_size < MIN_SIZE:
+            return {
+                'valid': False,
+                'reason': f'Файл слишком мал ({file_size} байт)',
+                'file_size': file_size,
+                'has_video_stream': False,
+                'has_audio_stream': False,
+                'duration': None
+            }
+        
+        # 4. Проверка ожидаемого размера (если указан)
+        if expected_size and abs(file_size - expected_size) > (expected_size * 0.1):  # 10% допуск
+            return {
+                'valid': False,
+                'reason': f'Размер файла не совпадает: {file_size} != {expected_size}',
+                'file_size': file_size,
+                'has_video_stream': False,
+                'has_audio_stream': False,
+                'duration': None
+            }
+        
+        # 5. Быстрая проверка чтения файла
+        try:
+            with open(file_path, 'rb') as f:
+                # Читаем начало файла
+                header = f.read(1024)
+                if len(header) < 100:
+                    return {
+                        'valid': False,
+                        'reason': 'Не удалось прочитать начало файла',
+                        'file_size': file_size,
+                        'has_video_stream': False,
+                        'has_audio_stream': False,
+                        'duration': None
+                    }
+                
+                # Проверяем что файл не полностью состоит из нулей
+                if all(b == 0 for b in header[:100]):
+                    return {
+                        'valid': False,
+                        'reason': 'Файл состоит только из нулей',
+                        'file_size': file_size,
+                        'has_video_stream': False,
+                        'has_audio_stream': False,
+                        'duration': None
+                    }
+                
+                # Для маленьких файлов читаем весь файл
+                if file_size < 1024 * 1024:  # < 1MB
+                    f.seek(0)
+                    entire_file = f.read()
+                    if len(entire_file) != file_size:
+                        return {
+                            'valid': False,
+                            'reason': 'Не удалось прочитать весь файл',
+                            'file_size': file_size,
+                            'has_video_stream': False,
+                            'has_audio_stream': False,
+                            'duration': None
+                        }
+        except Exception as e:
+            return {
+                'valid': False,
+                'reason': f'Ошибка чтения файла: {str(e)}',
+                'file_size': file_size,
+                'has_video_stream': False,
+                'has_audio_stream': False,
+                'duration': None
+            }
+        
+        # 6. Проверка через ffprobe (если доступен)
+        ffprobe_result = await _check_with_ffprobe(file_path)
+        
+        if ffprobe_result['valid']:
+            return {
+                'valid': True,
+                'reason': None,
+                'file_size': file_size,
+                'has_video_stream': ffprobe_result.get('has_video_stream', False),
+                'has_audio_stream': ffprobe_result.get('has_audio_stream', False),
+                'duration': ffprobe_result.get('duration')
+            }
+        
+        # 7. Если ffprobe не доступен или не поддерживает формат, делаем базовые проверки
+        extension = file_path.suffix.lower()
+        
+        # Для MP3 файлов проверяем заголовок
+        if extension == '.mp3':
+            if not header.startswith(b'ID3') and header[:2] != b'\xFF\xFB':
+                # Некоторые MP3 могут не иметь стандартного заголовка, но это не обязательно ошибка
+                logger.warning(f"MP3 файл не имеет стандартного заголовка: {file_path}")
+                # Но всё равно считаем валидным, так как некоторые MP3 могут быть без ID3 тегов
+        
+        # Для MP4 файлов проверяем наличие 'ftyp' атома
+        elif extension == '.mp4' or extension == '.m4a':
+            if b'ftyp' not in header:
+                return {
+                    'valid': False,
+                    'reason': 'MP4 файл не содержит ftyp атом',
+                    'file_size': file_size,
+                    'has_video_stream': False,
+                    'has_audio_stream': False,
+                    'duration': None
+                }
+        
+        # 8. Если дошли сюда, файл считается валидным
+        return {
+            'valid': True,
+            'reason': None,
+            'file_size': file_size,
+            'has_video_stream': True,  # Предполагаем что есть видео
+            'has_audio_stream': True,  # Предполагаем что есть аудио
+            'duration': None  # Не знаем длительность без ffprobe
+        }
+        
+    except Exception as e:
+        logger.error(f"Ошибка при проверке целостности файла {file_path}: {e}")
+        return {
+            'valid': False,
+            'reason': f'Ошибка проверки: {str(e)}',
+            'file_size': 0,
+            'has_video_stream': False,
+            'has_audio_stream': False,
+            'duration': None
+        }
+
+
+async def _check_with_ffprobe(file_path: Path) -> Dict[str, Any]:
+    """
+    Проверяет файл через ffprobe
+    """
+    try:
+        # Проверяем доступность ffprobe
+        result = await asyncio.create_subprocess_exec(
+            'ffprobe', '-version',
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        await result.communicate()
+        
+        if result.returncode != 0:
+            logger.debug("ffprobe не доступен")
+            return {'valid': True}  # Если ffprobe нет, считаем файл валидным
+        
+        # Запускаем ffprobe для проверки файла
+        process = await asyncio.create_subprocess_exec(
+            'ffprobe',
+            '-v', 'error',
+            '-show_entries', 'format=duration,size',
+            '-show_entries', 'stream=codec_type',
+            '-of', 'json',
+            str(file_path),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        
+        stdout, stderr = await process.communicate()
+        
+        if process.returncode != 0:
+            error_msg = stderr.decode('utf-8', errors='ignore').strip()
+            
+            # Игнорируем некоторые не критичные ошибки
+            if "moov atom not found" in error_msg:
+                logger.warning(f"ffprobe предупреждение для {file_path}: moov atom not found")
+                # Всё равно считаем валидным
+                return {'valid': True, 'has_video_stream': True, 'has_audio_stream': True}
+            
+            logger.error(f"ffprobe ошибка для {file_path}: {error_msg}")
+            return {'valid': False}
+        
+        # Парсим JSON вывод ffprobe
+        try:
+            probe_data = json.loads(stdout.decode('utf-8', errors='ignore'))
+            
+            has_video_stream = False
+            has_audio_stream = False
+            duration = None
+            
+            # Проверяем потоки
+            if 'streams' in probe_data:
+                for stream in probe_data['streams']:
+                    if stream.get('codec_type') == 'video':
+                        has_video_stream = True
+                    elif stream.get('codec_type') == 'audio':
+                        has_audio_stream = True
+            
+            # Получаем длительность
+            if 'format' in probe_data and 'duration' in probe_data['format']:
+                try:
+                    duration = float(probe_data['format']['duration'])
+                except (ValueError, TypeError):
+                    pass
+            
+            # Для аудиофайлов достаточно только аудио потока
+            if file_path.suffix.lower() in ['.mp3', '.m4a', '.aac', '.flac', '.wav']:
+                if has_audio_stream:
+                    return {
+                        'valid': True,
+                        'has_video_stream': has_video_stream,
+                        'has_audio_stream': has_audio_stream,
+                        'duration': duration
+                    }
+                else:
+                    return {'valid': False}
+            
+            # Для видеофайлов должен быть хотя бы один поток (видео или аудио)
+            if has_video_stream or has_audio_stream:
+                return {
+                    'valid': True,
+                    'has_video_stream': has_video_stream,
+                    'has_audio_stream': has_audio_stream,
+                    'duration': duration
+                }
+            else:
+                return {'valid': False}
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка парсинга JSON от ffprobe: {e}")
+            return {'valid': True}  # На всякий случай считаем валидным
+            
+    except Exception as e:
+        logger.error(f"Ошибка при вызове ffprobe: {e}")
+        return {'valid': True}  # Если ошибка, считаем файл валидным
 
 def get_date_sort_key(item, key):
     val = item.get(key)

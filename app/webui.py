@@ -8,17 +8,32 @@ from typing import Optional, List
 import math
 from pathlib import Path
 import os
+import time
+from datetime import datetime
 from app.database import db
 from app.queue import queue
 from app.utils import normalize_video_url, get_date_sort_key
 from app.models import VideoStatus
 from app import logger
 
+
 router = APIRouter()
 
 # Настраиваем шаблоны
 BASE_DIR = Path(__file__).parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
+
+
+# Фильтр для timestamp
+def timestamp_to_time(timestamp):
+    if not timestamp:
+        return "--:--:--"
+    try:
+        return datetime.fromtimestamp(timestamp).strftime('%H:%M:%S')
+    except:
+        return "--:--:--"
+
+templates.env.filters["timestamp_to_time"] = timestamp_to_time
 
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -215,10 +230,26 @@ async def video_detail(request: Request, video_hash: str):
 
 @router.get("/queue", response_class=HTMLResponse)
 async def queue_status(request: Request):
-    """
-    Страница статуса очереди загрузок
-    """
-    queue_info = await queue.get_queue_info() if hasattr(queue, 'get_queue_info') else {}
+    """Страница очереди"""
+    try:
+        queue_info = await queue.get_queue_info()
+        
+        # Форматируем время
+        if queue_info:
+            for task in queue_info.get('queue', []):
+                task['added_time'] = timestamp_to_time(task.get('added_at'))
+            
+            for task in queue_info.get('active_tasks_list', []):
+                task['started_time'] = timestamp_to_time(task.get('started_at'))
+                task['worker_name'] = f"Воркер {task.get('worker_id', '?')}"
+        
+        logger.debug(f"Queue: {queue_info.get('active_tasks', 0)} active, "
+                    f"{queue_info.get('queued_tasks', 0)} queued, "
+                    f"{queue_info.get('working_workers', 0)}/{queue_info.get('total_workers', 0)} workers")
+        
+    except Exception as e:
+        logger.error(f"Error getting queue info: {e}")
+        queue_info = {}
     
     return templates.TemplateResponse("queue.html", {
         "request": request,

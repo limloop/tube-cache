@@ -37,9 +37,14 @@ class StorageManager:
         self.log_check_interval = settings.storage.log_check_interval
         self.integrity_check_interval = settings.storage.integrity_check_interval  # секунды
         
-        # Время последних операций (хранится только в памяти)
+        # Время последних операций
         self._last_log_cleanup = 0
         self._last_integrity_check = 0
+        
+        # Флаги выполняющихся операций (защита от повторного запуска)
+        self._integrity_check_running = False
+        self._cleanup_running = False
+        
         self._monitor_task = None
         self._is_monitoring = False
     
@@ -92,28 +97,56 @@ class StorageManager:
         """Выполнение всех проверок состояния хранилища."""
         current_time = time.time()
         
-        # Проверка заполненности хранилища
+        # 1. Проверка заполненности хранилища
         storage_info = await self.get_storage_info()
-        if storage_info['used_percent'] >= self.storage_cleanup_threshold:
+        if (storage_info['used_percent'] >= self.storage_cleanup_threshold and not self._cleanup_running):
             logger.warning(f"Хранилище заполнено на {storage_info['used_percent']}%, запуск очистки")
-            await self.cleanup_old_videos()
+            asyncio.create_task(self._safe_cleanup_old_videos())
         
-        # Ежесуточная очистка логов
+        # 2. Проверка логов - раз в указанный интервал
         if current_time - self._last_log_cleanup > self.log_check_interval:
             await self.cleanup_old_logs()
             self._last_log_cleanup = current_time
         
-        # Периодическая проверка целостности
-        if current_time - self._last_integrity_check > self.integrity_check_interval:
-            await self.check_all_video_integrity()
-            self._last_integrity_check = current_time
+        # 3. Проверка целостности - раз в указанный интервал
+        if (current_time - self._last_integrity_check > self.integrity_check_interval and not self._integrity_check_running):
+            asyncio.create_task(self._safe_check_video_integrity())
     
+    async def _safe_cleanup_old_videos(self):
+        """Безопасная очистка видео с защитой от повторного запуска."""
+        if self._cleanup_running:
+            logger.debug("Очистка видео уже выполняется, пропускаем")
+            return
+            
+        self._cleanup_running = True
+        try:
+            await self.cleanup_old_videos()
+        finally:
+            self._cleanup_running = False
+    
+    async def _safe_check_video_integrity(self):
+        """Безопасная проверка целостности с защитой от повторного запуска."""
+        if self._integrity_check_running:
+            logger.debug("Проверка целостности уже выполняется, пропускаем")
+            return
+            
+        self._integrity_check_running = True
+        try:
+            await self.check_all_video_integrity()
+            self._last_integrity_check = time.time()
+        finally:
+            self._integrity_check_running = False
+
     async def cleanup_old_videos(self) -> List[str]:
         """
         Очистка самых старых видеофайлов для освобождения места.
         
         Возвращает список хешей удаленных видео.
         """
+        if self._cleanup_running:
+            return []
+            
+        self._cleanup_running = True
         deleted_hashes = []
         
         try:
@@ -158,6 +191,8 @@ class StorageManager:
                 
         except Exception as e:
             logger.error(f"Ошибка очистки видео: {e}")
+        finally:
+            self._cleanup_running = False
         
         return deleted_hashes
     
@@ -219,12 +254,21 @@ class StorageManager:
         Возвращает список хешей поврежденных файлов.
         """
         damaged_files = []
+        start_time = time.time()
         
         try:
             videos = await db.get_all_ready_videos()
+            total_videos = len(videos)
             
-            for video in videos:
+            if total_videos == 0:
+                logger.debug("Нет видео для проверки целостности")
+                return damaged_files
+            
+            logger.info(f"Начинаем проверку целостности {total_videos} видео...")
+            
+            for index, video in enumerate(videos, 1):
                 if not self._is_monitoring:
+                    logger.info("Проверка целостности прервана (остановлен мониторинг)")
                     break
                     
                 video_hash = video['hash']
@@ -242,8 +286,18 @@ class StorageManager:
                             
                     except Exception as e:
                         logger.error(f"Ошибка проверки файла {video_hash[:12]}: {e}")
+                
+                # Логируем прогресс каждые 10% или каждые 10 файлов
+                if index % max(10, total_videos // 10) == 0:
+                    progress = (index / total_videos) * 100
+                    logger.debug(f"Прогресс проверки целостности: {progress:.0f}% ({index}/{total_videos})")
             
-            logger.info(f"Проверка целостности: {len(videos)} проверено, {len(damaged_files)} повреждено")
+            elapsed_time = time.time() - start_time
+            logger.info(
+                f"Проверка целостности завершена: "
+                f"{total_videos} проверено, {len(damaged_files)} повреждено, "
+                f"время: {elapsed_time:.1f} сек"
+            )
             
         except Exception as e:
             logger.error(f"Ошибка проверки целостности: {e}")

@@ -1,103 +1,466 @@
 {% extends "base.html" %}
 
-{% block title %}Очередь загрузок - Video Server{% endblock %}
+{% block title %}Очередь загрузок{% endblock %}
+
+{% block extra_css %}
+<style>
+    .metric-card {
+        border-radius: 10px;
+        transition: all 0.3s;
+        border: none;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 5px 20px rgba(0,0,0,0.12);
+    }
+    
+    .metric-icon {
+        font-size: 2.5rem;
+        opacity: 0.9;
+    }
+    
+    .task-row {
+        transition: all 0.2s;
+        border-left: 4px solid transparent;
+    }
+    
+    .task-row.active {
+        border-left-color: #ffc107;
+        background-color: rgba(255, 193, 7, 0.05);
+    }
+    
+    .task-row.queued {
+        border-left-color: #6c757d;
+    }
+    
+    .worker-badge {
+        font-family: monospace;
+        font-size: 0.85em;
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+    }
+    
+    .url-truncate {
+        max-width: 250px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .age-badge {
+        font-family: monospace;
+        font-size: 0.8em;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1>
-        <i class="bi bi-clock-history"></i> Очередь загрузок
-    </h1>
-    <a href="/" class="btn btn-primary">
-        <i class="bi bi-plus-circle"></i> Добавить видео
-    </a>
-</div>
+<div class="container-fluid py-4">
+    <!-- Заголовок -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1">
+                <i class="bi bi-list-task text-primary me-2"></i>Система загрузок
+            </h1>
+            <p class="text-muted mb-0">Управление очередью и мониторинг выполнения</p>
+        </div>
+        <div>
+            <a href="/" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-2"></i>Добавить видео
+            </a>
+            <button onclick="location.reload()" class="btn btn-outline-secondary ms-2">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
 
-{% if queue_info %}
-<div class="row">
-    <!-- Статистика -->
-    <div class="col-md-4 mb-4">
-        <div class="card shadow">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0">
-                    <i class="bi bi-speedometer2"></i> Статистика
-                </h5>
+    {% if not queue_info %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        Информация об очереди временно недоступна
+    </div>
+    {% else %}
+    
+    <!-- Статус системы -->
+    <div class="alert alert-{% if queue_info.is_running %}success{% else %}danger{% endif %} mb-4">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-{% if queue_info.is_running %}play-circle{% else %}stop-circle{% endif %} me-3 fs-4"></i>
+            <div class="flex-grow-1">
+                <strong>Система {% if queue_info.is_running %}активна{% else %}остановлена{% endif %}</strong>
+                <span class="ms-3 text-muted">
+                    Воркеров: {{ queue_info.working_workers }}/{{ queue_info.total_workers }}
+                    | Активных задач: {{ queue_info.active_tasks }}
+                    | В очереди: {{ queue_info.queued_tasks }}
+                </span>
             </div>
-            <div class="card-body">
-                <div class="list-group list-group-flush">
-                    <div class="list-group-item d-flex justify-content-between">
-                        <span>В очереди:</span>
-                        <strong class="text-primary">{{ queue_info.queued_tasks }}</strong>
+        </div>
+    </div>
+    
+    <!-- Основные метрики -->
+    <div class="row g-3 mb-4">
+        <!-- Воркеры -->
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="card metric-card border-info">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0 me-3">
+                            <div class="metric-icon text-info">
+                                <i class="bi bi-cpu"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ queue_info.working_workers }}/{{ queue_info.total_workers }}</h3>
+                            <p class="text-muted mb-0">Воркеры</p>
+                        </div>
                     </div>
-                    <div class="list-group-item d-flex justify-content-between">
-                        <span>Активные:</span>
-                        <strong class="text-warning">{{ queue_info.active_tasks }}</strong>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Активные задачи -->
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="card metric-card border-warning">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0 me-3">
+                            <div class="metric-icon text-warning">
+                                <i class="bi bi-play-circle"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ queue_info.active_tasks }}</h3>
+                            <p class="text-muted mb-0">Активные</p>
+                        </div>
                     </div>
-                    <div class="list-group-item d-flex justify-content-between">
-                        <span>Макс. параллельно:</span>
-                        <strong>{{ queue_info.max_concurrent }}</strong>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Задачи в очереди -->
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="card metric-card border-secondary">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0 me-3">
+                            <div class="metric-icon text-secondary">
+                                <i class="bi bi-clock"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ queue_info.queued_tasks }}</h3>
+                            <p class="text-muted mb-0">В очереди</p>
+                        </div>
                     </div>
-                    <div class="list-group-item d-flex justify-content-between">
-                        <span>Всего загружено:</span>
-                        <strong class="text-success">{{ queue_info.stats.total_processed }}</strong>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Завершено -->
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="card metric-card border-success">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0 me-3">
+                            <div class="metric-icon text-success">
+                                <i class="bi bi-check-circle"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ queue_info.stats.completed }}</h3>
+                            <p class="text-muted mb-0">Завершено</p>
+                        </div>
                     </div>
-                    <div class="list-group-item d-flex justify-content-between">
-                        <span>Ошибок:</span>
-                        <strong class="text-danger">{{ queue_info.stats.total_failed }}</strong>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Ошибки -->
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="card metric-card border-danger">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0 me-3">
+                            <div class="metric-icon text-danger">
+                                <i class="bi bi-x-circle"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ queue_info.stats.failed }}</h3>
+                            <p class="text-muted mb-0">Ошибки</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Повторные попытки -->
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="card metric-card border-warning">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0 me-3">
+                            <div class="metric-icon text-warning">
+                                <i class="bi bi-arrow-repeat"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ queue_info.stats.retried }}</h3>
+                            <p class="text-muted mb-0">Повторы</p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- Текущая очередь -->
-    <div class="col-md-8">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">
-                    <i class="bi bi-list-task"></i> Текущие задачи
-                </h5>
-            </div>
-            <div class="card-body p-0">
-                {% if queue_info.queue %}
-                <div class="list-group list-group-flush">
-                    {% for task in queue_info.queue %}
-                    <div class="list-group-item">
-                        <div class="d-flex w-100 justify-content-between">
-                            <div>
-                                <h6 class="mb-1">Задача #{{ loop.index }}</h6>
-                                <small class="text-muted">{{ task.url }}</small>
+    <!-- Распределение воркеров -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">
+                        <i class="bi bi-diagram-3 me-2"></i>Распределение воркеров
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="d-flex align-items-center h-100">
+                                <div class="flex-grow-1">
+                                    <div class="progress" style="height: 25px;">
+                                        {% set active_pct = (queue_info.active_tasks / queue_info.max_concurrent) * 100 if queue_info.max_concurrent > 0 else 0 %}
+                                        {% set free_pct = 100 - active_pct %}
+                                        
+                                        <div class="progress-bar bg-warning" style="width: {{ active_pct }}%">
+                                            <strong>Активные: {{ queue_info.active_tasks }}</strong>
+                                        </div>
+                                        <div class="progress-bar bg-success" style="width: {{ free_pct }}%">
+                                            <strong>Свободно: {{ queue_info.max_concurrent - queue_info.active_tasks }}</strong>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 text-center">
+                                        <small class="text-muted">
+                                            Используется {{ queue_info.active_tasks }} из {{ queue_info.max_concurrent }} доступных слотов
+                                        </small>
+                                    </div>
+                                </div>
                             </div>
-                            <span class="badge bg-secondary">Ожидание</span>
                         </div>
-                        <div class="mt-2">
-                            <div class="progress" style="height: 6px;">
-                                <div class="progress-bar" style="width: 0%"></div>
+                        <div class="col-md-4">
+                            <div class="d-flex flex-column h-100 justify-content-center">
+                                <div class="mb-2">
+                                    <span class="badge bg-info">Всего воркеров: {{ queue_info.total_workers }}</span>
+                                </div>
+                                <div class="mb-2">
+                                    <span class="badge bg-success">Работают: {{ queue_info.working_workers }}</span>
+                                </div>
+                                <div>
+                                    <span class="badge bg-secondary">Макс. параллельно: {{ queue_info.max_concurrent }}</span>
+                                </div>
                             </div>
-                            <small class="text-muted">Позиция в очереди: {{ loop.index }}</small>
                         </div>
                     </div>
-                    {% endfor %}
                 </div>
-                {% else %}
-                <div class="text-center py-5">
-                    <div class="display-1 text-muted">
-                        <i class="bi bi-check-circle"></i>
-                    </div>
-                    <h4 class="mt-3">Очередь пуста</h4>
-                    <p class="text-muted">Нет активных задач загрузки</p>
-                </div>
-                {% endif %}
             </div>
         </div>
     </div>
-</div>
-{% else %}
-<div class="text-center py-5">
-    <div class="display-1 text-muted">
-        <i class="bi bi-exclamation-triangle"></i>
+    
+    <!-- Активные задачи -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-activity me-2"></i>Активные задачи
+                        {% if queue_info.active_tasks > 0 %}
+                        <span class="badge bg-light text-dark ms-2">{{ queue_info.active_tasks }}</span>
+                        {% endif %}
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if queue_info.active_tasks_list %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="50" class="ps-4">#</th>
+                                    <th>Хеш</th>
+                                    <th>URL</th>
+                                    <th width="120">Воркер</th>
+                                    <th width="100">Повторы</th>
+                                    <th width="150">Начата</th>
+                                    <th width="100">Длится</th>
+                                    <th width="100">Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in queue_info.active_tasks_list %}
+                                <tr class="task-row active">
+                                    <td class="ps-4">{{ loop.index }}</td>
+                                    <td>
+                                        <code class="text-primary">{{ task.hash }}</code>
+                                    </td>
+                                    <td>
+                                        <span class="url-truncate" title="{{ task.url }}">
+                                            {{ task.url }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="worker-badge badge">{{ task.worker_name }}</span>
+                                    </td>
+                                    <td>
+                                        {% if task.retry_count > 0 %}
+                                        <span class="badge bg-warning">{{ task.retry_count }}</span>
+                                        {% else %}
+                                        <span class="text-muted">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ task.started_time|default('—') }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="age-badge badge bg-secondary">
+                                            {{ task.task_age|default(0) }} сек
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-play me-1"></i>Загружается
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <div class="display-1 text-muted opacity-25">
+                            <i class="bi bi-check-circle"></i>
+                        </div>
+                        <h4 class="mt-3 text-muted">Нет активных задач</h4>
+                        <p class="text-muted">Все воркеры свободны</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
     </div>
-    <h3 class="mt-3">Информация недоступна</h3>
-    <p class="text-muted">Сервер очереди не запущен или произошла ошибка</p>
+    
+    <!-- Очередь задач -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-list-ul me-2"></i>Очередь задач
+                        {% if queue_info.queued_tasks > 0 %}
+                        <span class="badge bg-light text-dark ms-2">{{ queue_info.queued_tasks }}</span>
+                        {% endif %}
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if queue_info.queue %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="50" class="ps-4">#</th>
+                                    <th>Хеш</th>
+                                    <th>URL</th>
+                                    <th width="100">Повторы</th>
+                                    <th width="150">Добавлена</th>
+                                    <th width="100">Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in queue_info.queue %}
+                                <tr class="task-row queued">
+                                    <td class="ps-4">{{ task.position }}</td>
+                                    <td>
+                                        <code class="text-primary">{{ task.hash }}</code>
+                                    </td>
+                                    <td>
+                                        <span class="url-truncate" title="{{ task.url }}">
+                                            {{ task.url }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if task.retry_count > 0 %}
+                                        <span class="badge bg-warning">{{ task.retry_count }}</span>
+                                        {% else %}
+                                        <span class="text-muted">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ task.added_time|default('—') }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">
+                                            <i class="bi bi-clock me-1"></i>В очереди
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if queue_info.queued_tasks > 20 %}
+                    <div class="card-footer bg-white">
+                        <div class="text-center">
+                            <small class="text-muted">
+                                Показано 20 из {{ queue_info.queued_tasks }} задач
+                            </small>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <div class="text-center py-5">
+                        <div class="display-1 text-muted opacity-25">
+                            <i class="bi bi-inbox"></i>
+                        </div>
+                        <h4 class="mt-3 text-muted">Очередь пуста</h4>
+                        <p class="text-muted">Нет задач, ожидающих обработки</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% endif %}
 </div>
-{% endif %}
+
+<script>
+// Автообновление каждые 5 секунд
+let refreshTimer = setTimeout(() => location.reload(), 5000);
+
+// Сбрасываем таймер при активности пользователя
+function resetRefreshTimer() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => location.reload(), 10000);
+}
+
+document.addEventListener('mousemove', resetRefreshTimer);
+document.addEventListener('keypress', resetRefreshTimer);
+document.addEventListener('click', resetRefreshTimer);
+
+// Показываем уведомление если есть зависшие задачи
+document.addEventListener('DOMContentLoaded', function() {
+    const longTasks = document.querySelectorAll('.age-badge');
+    longTasks.forEach(badge => {
+        const age = parseInt(badge.textContent);
+        if (age > 300) { // 5 минут
+            badge.classList.remove('bg-secondary');
+            badge.classList.add('bg-danger');
+            badge.innerHTML = `<i class="bi bi-exclamation-triangle me-1"></i>${age} сек`;
+        } else if (age > 60) { // 1 минута
+            badge.classList.remove('bg-secondary');
+            badge.classList.add('bg-warning');
+        }
+    });
+});
+</script>
 {% endblock %}

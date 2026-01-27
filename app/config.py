@@ -87,7 +87,7 @@ class StorageConfig(BaseModel):
 class DownloadConfig(BaseModel):
     """Конфигурация загрузки"""
     max_concurrent: int = Field(default=2, ge=1, description="Максимум параллельных загрузок")
-    timeout_seconds: int = Field(default=300, ge=60, description="Таймаут загрузки в секундах")
+    timeout_seconds: int = Field(default=300, ge=0, description="Таймаут загрузки в секундах")
     retry_attempts: int = Field(default=2, ge=0, description="Количество попыток повтора")
 
 class ServerConfig(BaseModel):
