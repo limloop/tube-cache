@@ -2,7 +2,7 @@
 Загрузка и управление конфигурацией приложения
 """
 from pydantic import BaseModel, Field
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 import yaml
 import os
 import argparse
@@ -89,6 +89,10 @@ class DownloadConfig(BaseModel):
     max_concurrent: int = Field(default=2, ge=1, description="Максимум параллельных загрузок")
     timeout_seconds: int = Field(default=300, ge=0, description="Таймаут загрузки в секундах")
     retry_attempts: int = Field(default=2, ge=0, description="Количество попыток повтора")
+    yt_dlp: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, 
+        description="Пользовательские опции yt-dlp"
+    )
 
 class ServerConfig(BaseModel):
     """Конфигурация сервера"""

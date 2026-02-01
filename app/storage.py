@@ -209,7 +209,7 @@ class StorageManager:
         if not logs_dir.exists():
             return deleted_files
         
-        cutoff_date = datetime.now().timestamp() - (self.log_retention_days * self.log_check_interval)
+        cutoff_date = datetime.now().timestamp() - (self.log_retention_days * 86400)
         
         for log_file in logs_dir.glob("*.log"):
             if not log_file.is_file():

@@ -24,6 +24,7 @@ class VideoDownloader:
     def __init__(self):
         self.videos_path = Path(settings.storage.videos_path)
         self.temp_path = Path(settings.storage.temp_path)
+        self.opts = settings.download.yt_dlp
         
         # Создаём директории
         self.videos_path.mkdir(parents=True, exist_ok=True)
@@ -144,13 +145,20 @@ class VideoDownloader:
         except Exception as e:
             logger.warning(f"Ошибка очистки временных файлов {video_hash}: {e}")
     
-    def _build_ydl_opts(self, format_spec: str, extract_audio: bool, video_hash: str) -> Dict[str, Any]:
-        """Создаёт опции для yt-dlp"""
-        # Временный файл
+    def _build_ydl_opts(
+        self, 
+        format_spec: str, 
+        extract_audio: bool, 
+        video_hash: str
+    ) -> Dict[str, Any]:
+        """Создаёт опции для yt-dlp с учётом конфигурации"""
+        
+        # Базовые настройки
         temp_filename = f"{video_hash}_temp.%(ext)s"
         output_template = str(self.temp_path / temp_filename)
         
-        opts = {
+        # Стандартные опции по умолчанию
+        default_opts = {
             'format': format_spec,
             'outtmpl': output_template,
             'continuedl': True,
@@ -168,18 +176,30 @@ class VideoDownloader:
             },
         }
         
-        if extract_audio:
-            opts.update({
-                'format': 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                }],
-            })
-        else:
-            opts['merge_output_format'] = 'mp4'
+        # Объединяем с пользовательскими настройками из конфига
+        if self.opts:
+            user_opts = self.opts.copy()
+            
+            # Специальная обработка http_headers (объединение, а не перезапись)
+            if 'http_headers' in user_opts and 'http_headers' in default_opts:
+                default_opts['http_headers'].update(user_opts.pop('http_headers'))
+            
+            default_opts.update(user_opts)
         
-        return opts
+        # Настройки для аудио или видео
+        if extract_audio:
+            default_opts.update({
+                'format': 'bestaudio/best'
+            })
+            
+            # Если пользователь указал свои postprocessors для аудио
+            if self.opts and 'postprocessors' in self.opts:
+                default_opts['postprocessors'] = self.opts['postprocessors']
+        else:
+            if 'merge_output_format' not in default_opts:
+                default_opts['merge_output_format'] = 'mp4'
+        
+        return default_opts
     
     async def _find_downloaded_file(self, video_hash: str, expected_ext: str) -> Optional[Path]:
         """Ищет загруженный файл"""
