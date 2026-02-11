@@ -396,14 +396,11 @@ async def get_storage_info_detailed():
     }
 
 @app.post("/cleanup")
-async def trigger_cleanup(aggressive: bool = False):
+async def trigger_cleanup():
     """
     Ручная очистка хранилища
-    
-    Args:
-        aggressive: Если True, удаляет больше видео для создания запаса места
     """
-    deleted = await storage.cleanup_old_videos(aggressive=aggressive)
+    deleted = await storage.cleanup_old_videos()
     
     # Получаем статистику после очистки
     info = await storage.get_storage_info()
@@ -412,6 +409,5 @@ async def trigger_cleanup(aggressive: bool = False):
         "message": f"Очистка завершена, удалено {len(deleted)} видео",
         "deleted_count": len(deleted),
         "deleted_hashes": deleted[:10],  # Первые 10 хешей
-        "storage_info": info,
-        "aggressive_mode": aggressive
+        "storage_info": info
     }

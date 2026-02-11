@@ -91,7 +91,7 @@ class DownloadConfig(BaseModel):
     retry_attempts: int = Field(default=2, ge=0, description="Количество попыток повтора")
     yt_dlp: Optional[Dict[str, Any]] = Field(
         default_factory=dict, 
-        description="Пользовательские опции yt-dlp"
+        description="Пользовательские опции yt_dlp"
     )
 
 class ServerConfig(BaseModel):

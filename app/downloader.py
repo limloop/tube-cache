@@ -170,10 +170,7 @@ class VideoDownloader:
             'socket_timeout': 30,
             'concurrent_fragment_downloads': 2,
             'skip_unavailable_fragments': True,
-            'fixup': 'detect_or_warn',
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
+            'fixup': 'detect_or_warn'
         }
         
         # Объединяем с пользовательскими настройками из конфига
