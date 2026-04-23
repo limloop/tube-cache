@@ -23,7 +23,6 @@ class DownloadTask:
     added_at: float = field(default_factory=time.time)
     started_at: Optional[float] = None
     retry_count: int = 0
-    max_retries: int = 3
     worker_id: Optional[int] = None
 
 class TaskQueue:
@@ -42,7 +41,8 @@ class TaskQueue:
         self._lock = asyncio.Lock()
         self._max_concurrent = settings.download.max_concurrent
         self._download_timeout = settings.download.timeout_seconds
-        
+        self._max_retries = settings.download.retry_attempts
+
         # Фиксированные воркеры
         self._workers: List[asyncio.Task] = []
         
@@ -314,8 +314,8 @@ class TaskQueue:
         """Обрабатывает ошибку задачи"""
         task.retry_count += 1
         
-        if task.retry_count < task.max_retries:
-            logger.info(f"🔄 Повтор задачи {task.video_hash[:12]} ({task.retry_count}/{task.max_retries})")
+        if task.retry_count < self._max_retries:
+            logger.info(f"🔄 Повтор задачи {task.video_hash[:12]} ({task.retry_count}/{self._max_retries})")
             self._stats['retried'] += 1
             
             # Возвращаем задачу в очередь для повторной попытки

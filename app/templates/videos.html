@@ -35,6 +35,18 @@
                     <option value="ready" {% if status == 'ready' %}selected{% endif %}>
                         ✅ Только готовые
                     </option>
+                    <option value="downloading" {% if status == 'downloading' %}selected{% endif %}>
+                        ✍️ Загрузка
+                    </option>
+                    <option value="pending" {% if status == 'pending' %}selected{% endif %}>
+                        ⏳ В очереди
+                    </option>
+                    <option value="failed" {% if status == 'failed' %}selected{% endif %}>
+                        ❌ Ошибки
+                    </option>
+                    <option value="deleted" {% if status == 'deleted' %}selected{% endif %}>
+                        🗑️ Удаленые
+                    </option>
                     <option value="all" {% if status == 'all' %}selected{% endif %}>
                         📋 Все статусы
                     </option>
@@ -138,13 +150,46 @@
 {% if total_pages > 1 %}
 <nav class="mt-4">
     <ul class="pagination justify-content-center">
+        <!-- Кнопка "Назад" -->
         <li class="page-item {% if not has_prev %}disabled{% endif %}">
             <a class="page-link" href="?page={{ prev_page }}&search={{ search }}&status={{ status }}">
                 <i class="bi bi-chevron-left"></i>
             </a>
         </li>
         
-        {% for p in range(1, total_pages + 1) %}
+        {% set pages_to_show = 7 %} <!-- общее количество отображаемых страниц -->
+        {% set side_pages = 2 %} <!-- сколько страниц показывать слева и справа от текущей -->
+        
+        {% set start_page = page - side_pages %}
+        {% set end_page = page + side_pages %}
+        
+        <!-- Корректируем, если вышли за пределы -->
+        {% if start_page < 2 %}
+            {% set start_page = 1 %}
+            {% set end_page = pages_to_show %}
+        {% endif %}
+        
+        {% if end_page > total_pages - 1 %}
+            {% set end_page = total_pages %}
+            {% set start_page = total_pages - pages_to_show + 1 %}
+        {% endif %}
+        
+        {% if start_page < 1 %}
+            {% set start_page = 1 %}
+        {% endif %}
+        
+        <!-- Первая страница -->
+        {% if start_page > 1 %}
+        <li class="page-item">
+            <a class="page-link" href="?page=1&search={{ search }}&status={{ status }}">1</a>
+        </li>
+        {% if start_page > 2 %}
+        <li class="page-item disabled"><span class="page-link">...</span></li>
+        {% endif %}
+        {% endif %}
+        
+        <!-- Центральные страницы -->
+        {% for p in range(start_page, end_page + 1) %}
         <li class="page-item {% if p == page %}active{% endif %}">
             <a class="page-link" href="?page={{ p }}&search={{ search }}&status={{ status }}">
                 {{ p }}
@@ -152,6 +197,19 @@
         </li>
         {% endfor %}
         
+        <!-- Последняя страница -->
+        {% if end_page < total_pages %}
+        {% if end_page < total_pages - 1 %}
+        <li class="page-item disabled"><span class="page-link">...</span></li>
+        {% endif %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ total_pages }}&search={{ search }}&status={{ status }}">
+                {{ total_pages }}
+            </a>
+        </li>
+        {% endif %}
+        
+        <!-- Кнопка "Вперед" -->
         <li class="page-item {% if not has_next %}disabled{% endif %}">
             <a class="page-link" href="?page={{ next_page }}&search={{ search }}&status={{ status }}">
                 <i class="bi bi-chevron-right"></i>

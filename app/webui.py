@@ -16,12 +16,10 @@ from app.utils import normalize_video_url, get_date_sort_key
 from app.models import VideoStatus
 from app import logger
 
-
 router = APIRouter()
 
 # Настраиваем шаблоны
-BASE_DIR = Path(__file__).parent.parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
+templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "app" / "templates"))
 
 
 # Фильтр для timestamp
@@ -92,7 +90,18 @@ async def list_videos(
     Список всех видео с пагинацией и поиском
     """
     # Получаем все видео из БД
-    all_videos = await db.get_all_ready_videos() if status == "ready" else await db.get_all_videos()
+    if status == "ready":
+        all_videos = await db.get_all_ready_videos()
+    elif status == "pending":
+        all_videos = await db.get_videos_by_status(VideoStatus.PENDING)
+    elif status == "downloading":
+        all_videos = await db.get_videos_by_status(VideoStatus.DOWNLOADING)
+    elif status == "failed":
+        all_videos = await db.get_videos_by_status(VideoStatus.FAILED)
+    elif status == "deleted":
+        all_videos = await db.get_videos_by_status(VideoStatus.DELETED)
+    else:
+        all_videos = await db.get_all_videos()
     
     # Фильтрация по поиску
     if search:
