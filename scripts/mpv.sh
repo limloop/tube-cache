@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# Конфигурация
+# Configuration
 SERVER="http://localhost:8000"
 CHECK_INTERVAL=3
 TIMEOUT=3600
 
-# Проверка аргументов
+# Check arguments
 if [ $# -eq 0 ]; then
-    echo "Использование: $0 <youtube-url> [mpv-параметры...]"
+    echo "Usage: $0 <youtube-url> [mpv-parameters...]"
     exit 1
 fi
 
@@ -15,7 +15,7 @@ URL="$1"
 shift
 MPV_ARGS="$@"
 
-# Функция для парсинга JSON (простая реализация без зависимостей)
+# Function for parsing JSON (simple implementation without dependencies)
 get_json_value() {
     echo "$1" | grep -o "\"$2\":\"[^\"]*\"" | head -1 | cut -d'"' -f4
 }
@@ -24,139 +24,139 @@ get_json_value_raw() {
     echo "$1" | grep -o "\"$2\":\"[^\"]*\"" | head -1
 }
 
-# Шаг 1: Запрос на скачивание
-echo "Запрос видео: $URL"
+# Step 1: Request download
+echo "Requesting video: $URL"
 RESPONSE=$(curl -s -X 'GET' "$SERVER/video?url=$URL" -H 'accept: application/json')
 
 if [ -z "$RESPONSE" ]; then
-    echo "Ошибка: сервер не ответил"
+    echo "Error: server did not respond"
     exit 1
 fi
 
-echo "Ответ сервера: $RESPONSE"
+echo "Server response: $RESPONSE"
 
-# Получаем хеш и статус
+# Get hash and status
 HASH=$(get_json_value "$RESPONSE" "hash")
 STATUS=$(get_json_value "$RESPONSE" "status")
 STREAM_URL=$(get_json_value "$RESPONSE" "stream_url")
 MESSAGE=$(get_json_value "$RESPONSE" "message")
 
-echo "Хеш: ${HASH}"
-echo "Статус: $STATUS"
-echo "Сообщение: $MESSAGE"
+echo "Hash: ${HASH}"
+echo "Status: $STATUS"
+echo "Message: $MESSAGE"
 
-# Проверяем, получен ли хеш
+# Check if hash was received
 if [ -z "$HASH" ] || [ "$HASH" = "null" ]; then
-    echo "Ошибка: не получен хеш видео"
+    echo "Error: video hash not received"
     exit 1
 fi
 
-# Если видео уже готово
+# If video is already ready
 if [ "$STATUS" = "ready" ] && [ -n "$STREAM_URL" ] && [ "$STREAM_URL" != "null" ]; then
-    echo "Видео уже готово к воспроизведению"
+    echo "Video is already ready for playback"
     
-    # Получаем название через /info/{hash}
+    # Get title via /info/{hash}
     INFO_RESPONSE=$(curl -s "$SERVER/info/$HASH")
     TITLE=$(get_json_value "$INFO_RESPONSE" "title")
     
-    # Если название не получено, используем хеш
+    # If title not received, use hash
     if [ -z "$TITLE" ] || [ "$TITLE" = "null" ]; then
-        TITLE="Видео ${HASH:0:8}"
+        TITLE="Video ${HASH:0:8}"
     fi
     
-    echo "Запуск mpv: $TITLE"
-    echo "URL потока: $SERVER$STREAM_URL"
+    echo "Starting mpv: $TITLE"
+    echo "Stream URL: $SERVER$STREAM_URL"
     
-    # Запускаем mpv с потоковой ссылкой
+    # Start mpv with stream URL
     mpv --title="$TITLE" --script-opts="osc-title=\"$TITLE\"" "$SERVER$STREAM_URL" $MPV_ARGS
     exit 0
 fi
 
-# Если статус не "ready" (скорее всего "downloading" или "processing")
-echo "Ожидание загрузки видео..."
-echo "Идентификатор: $HASH"
+# If status is not "ready" (likely "downloading" or "processing")
+echo "Waiting for video download..."
+echo "Identifier: $HASH"
 START_TIME=$(date +%s)
 
-# Основной цикл ожидания
+# Main waiting loop
 while true; do
-    # Проверка таймаута
+    # Check timeout
     CURRENT_TIME=$(date +%s)
     ELAPSED=$((CURRENT_TIME - START_TIME))
     
     if [ $ELAPSED -gt $TIMEOUT ]; then
-        echo "Таймаут ожидания ($TIMEOUT секунд)"
+        echo "Timeout ($TIMEOUT seconds)"
         exit 1
     fi
     
-    echo -n "Проверка статуса ($ELAPSED сек)... "
+    echo -n "Checking status ($ELAPSED sec)... "
     
-    # ВАЖНО: Запрашиваем статус через ТОТ ЖЕ эндпоинт /video с параметром url
-    # Или можно через /status/{hash}, если такой эндпоинт есть на сервере
-    # Пробуем оба варианта
+    # IMPORTANT: Request status through the SAME /video endpoint with url parameter
+    # Or via /status/{hash} if that endpoint exists on the server
+    # Trying both options
     
-    # Вариант 1: через /video?url=... (предпочтительный)
+    # Option 1: via /video?url=... (preferred)
     NEW_RESPONSE=$(curl -s -X 'GET' "$SERVER/video?url=$URL" -H 'accept: application/json')
     
-    # Если ответ пустой, пробуем вариант 2: через /status/{hash}
+    # If response is empty, try option 2: via /status/{hash}
     if [ -z "$NEW_RESPONSE" ]; then
         NEW_RESPONSE=$(curl -s "$SERVER/status/$HASH")
     fi
     
-    # Если все еще пусто, пробуем вариант 3: через /info/{hash} (только для статуса)
+    # If still empty, try option 3: via /info/{hash} (for status only)
     if [ -z "$NEW_RESPONSE" ]; then
         NEW_RESPONSE=$(curl -s "$SERVER/info/$HASH")
     fi
     
     if [ -z "$NEW_RESPONSE" ]; then
-        echo "Сервер не ответил"
+        echo "Server did not respond"
         sleep $CHECK_INTERVAL
         continue
     fi
     
-    # Парсим новый ответ
+    # Parse new response
     CURRENT_STATUS=$(get_json_value "$NEW_RESPONSE" "status")
     CURRENT_STREAM=$(get_json_value "$NEW_RESPONSE" "stream_url")
     CURRENT_MESSAGE=$(get_json_value "$NEW_RESPONSE" "message")
     
-    # Отладочная информация
-    echo "Статус: $CURRENT_STATUS"
+    # Debug info
+    echo "Status: $CURRENT_STATUS"
     
-    # Обработка статусов
+    # Handle statuses
     if [ "$CURRENT_STATUS" = "ready" ] && [ -n "$CURRENT_STREAM" ] && [ "$CURRENT_STREAM" != "null" ]; then
-        echo "Загрузка завершена!"
+        echo "Download complete!"
         
-        # Получаем название
+        # Get title
         INFO_RESPONSE=$(curl -s "$SERVER/info/$HASH")
         TITLE=$(get_json_value "$INFO_RESPONSE" "title")
         
         if [ -z "$TITLE" ] || [ "$TITLE" = "null" ]; then
-            TITLE="Видео ${HASH:0:8}"
+            TITLE="Video ${HASH:0:8}"
         fi
         
-        echo "Запуск: $TITLE"
-        echo "Потоковая ссылка: $SERVER$CURRENT_STREAM"
+        echo "Starting: $TITLE"
+        echo "Stream URL: $SERVER$CURRENT_STREAM"
         
-        # Небольшая пауза, чтобы сервер успел подготовить поток
+        # Small pause for server to prepare the stream
         sleep 1
         
-        # Запускаем mpv
+        # Start mpv
         mpv --title="$TITLE" --script-opts="osc-title=\"$TITLE\"" "$SERVER$CURRENT_STREAM" $MPV_ARGS
         exit 0
         
     elif [ "$CURRENT_STATUS" = "failed" ]; then
-        echo "Ошибка загрузки: $CURRENT_MESSAGE"
+        echo "Download error: $CURRENT_MESSAGE"
         exit 1
         
     elif [ "$CURRENT_STATUS" = "downloading" ] || [ "$CURRENT_STATUS" = "processing" ]; then
-        # Выводим прогресс, если есть сообщение
+        # Show progress if there's a message
         if [ -n "$CURRENT_MESSAGE" ] && [ "$CURRENT_MESSAGE" != "null" ]; then
-            echo "Прогресс: $CURRENT_MESSAGE"
+            echo "Progress: $CURRENT_MESSAGE"
         fi
         
     elif [ -z "$CURRENT_STATUS" ] || [ "$CURRENT_STATUS" = "null" ]; then
-        echo "Статус не получен, продолжаем ожидание..."
+        echo "Status not received, continuing to wait..."
     fi
     
-    # Пауза перед следующей проверкой
+    # Pause before next check
     sleep $CHECK_INTERVAL
 done
