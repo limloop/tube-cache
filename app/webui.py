@@ -180,9 +180,6 @@ async def list_videos(
 
 @router.get("/video/{video_hash}", response_class=HTMLResponse)
 async def video_detail(request: Request, video_hash: str):
-    """
-    Страница детальной информации о видео
-    """
     video = await db.get_video(video_hash)
     
     if not video:
@@ -191,7 +188,41 @@ async def video_detail(request: Request, video_hash: str):
             "error": "Видео не найдено"
         })
     
-    # Форматируем данные
+    # Получаем только готовые видео
+    ready_videos = await db.get_all_ready_videos()
+    
+    # Сортируем по дате добавления
+    sorted_videos = sorted(
+        ready_videos,
+        key=lambda v: v.get('created_at', ''),
+        reverse=False
+    )
+    
+    # Находим текущее видео
+    current_index = None
+    for i, v in enumerate(sorted_videos):
+        if v['hash'] == video_hash:
+            current_index = i
+            break
+    
+    # Соседние видео
+    prev_video = None
+    next_video = None
+    
+    if current_index is not None:
+        if current_index - 1 >= 0:
+            prev_video = sorted_videos[current_index - 1]
+        if current_index + 1 < len(sorted_videos):
+            next_video = sorted_videos[current_index + 1]
+    
+    # Случайные рекомендации
+    import random
+    random_videos = []
+    other_ready = [v for v in ready_videos if v['hash'] != video_hash]
+    if other_ready:
+        random_videos = random.sample(other_ready, min(5, len(other_ready)))
+    
+    # Форматируем видео (как было в оригинале)
     file_size = video.get('file_size')
     if file_size:
         if file_size >= 1024**3:
@@ -220,7 +251,6 @@ async def video_detail(request: Request, video_hash: str):
         'file_ext': video.get('file_ext', 'mp4'),
     }
     
-    # Определяем MIME type для video tag
     mime_types = {
         'mp4': 'video/mp4',
         'webm': 'video/webm',
@@ -232,9 +262,23 @@ async def video_detail(request: Request, video_hash: str):
         'video/mp4'
     )
     
+    # Форматируем соседние видео
+    def format_neighbor(v):
+        if not v:
+            return None
+        return {
+            'hash': v['hash'],
+            'title': v.get('title', 'Без названия'),
+            'uploader': v.get('uploader', 'Неизвестно'),
+            'duration_str': format_duration(v.get('duration')),
+        }
+    
     return templates.TemplateResponse("video.html", {
         "request": request,
-        "video": formatted_video
+        "video": formatted_video,
+        "prev_video": format_neighbor(prev_video),
+        "next_video": format_neighbor(next_video),
+        "random_videos": [format_neighbor(v) for v in random_videos],
     })
 
 @router.get("/queue", response_class=HTMLResponse)

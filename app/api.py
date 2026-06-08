@@ -4,6 +4,7 @@
 from fastapi import FastAPI, HTTPException, Query, Request, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from typing import Optional
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +34,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Подключаем статические файлы
+static_path = Path(__file__).parent.parent / "app" / "static"
+static_path.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent.parent / "app" / "static")), name="static")
 
 app.include_router(webui_router)
 

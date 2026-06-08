@@ -2,17 +2,18 @@
 
 {% block title %}{{ video.title }} - Video Server{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/video-player.css">
+{% endblock %}
+
 {% block content %}
 <div class="row">
-    <!-- Видеоплеер -->
     <div class="col-lg-8">
         <div class="card shadow mb-4">
             <div class="card-body p-0">
-                <div class="ratio ratio-16x9">
-                    <video controls class="w-100">
-                        <source src="/stream/{{ video.hash }}" type="{{ video.mime_type }}">
-                        Ваш браузер не поддерживает видео тег.
-                    </video>
+                <div id="player-container" class="player-container" 
+                     data-hash="{{ video.hash }}" 
+                     data-title="{{ video.title|tojson|safe }}">
                 </div>
             </div>
             <div class="card-footer">
@@ -22,15 +23,101 @@
                 </div>
             </div>
         </div>
+        
+        {% if prev_video or next_video %}
+        <div class="card shadow mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-arrow-left-right"></i> Навигация</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        {% if prev_video %}
+                        <a href="/video/{{ prev_video.hash }}" class="text-decoration-none">
+                            <div class="border rounded p-2 nav-card">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <i class="bi bi-arrow-left-circle-fill text-primary"></i>
+                                        <strong class="ms-1">Предыдущее</strong>
+                                    </div>
+                                    <span class="badge bg-secondary">{{ prev_video.duration_str }}</span>
+                                </div>
+                                <div class="mt-2">
+                                    <div class="fw-bold text-truncate">{{ prev_video.title }}</div>
+                                    <small class="text-muted">{{ prev_video.uploader }}</small>
+                                </div>
+                            </div>
+                        </a>
+                        {% else %}
+                        <div class="border rounded p-2 bg-light">
+                            <i class="bi bi-arrow-left-circle text-muted"></i>
+                            <span class="ms-1 text-muted">Нет предыдущего</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-6">
+                        {% if next_video %}
+                        <a href="/video/{{ next_video.hash }}" class="text-decoration-none">
+                            <div class="border rounded p-2 nav-card">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <i class="bi bi-arrow-right-circle-fill text-primary"></i>
+                                        <strong class="ms-1">Следующее</strong>
+                                    </div>
+                                    <span class="badge bg-secondary">{{ next_video.duration_str }}</span>
+                                </div>
+                                <div class="mt-2">
+                                    <div class="fw-bold text-truncate">{{ next_video.title }}</div>
+                                    <small class="text-muted">{{ next_video.uploader }}</small>
+                                </div>
+                            </div>
+                        </a>
+                        {% else %}
+                        <div class="border rounded p-2 bg-light">
+                            <i class="bi bi-arrow-right-circle text-muted"></i>
+                            <span class="ms-1 text-muted">Нет следующего</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if random_videos %}
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-shuffle"></i> Случайная подборка</h5>
+                <small class="text-white-50">Из имеющейся медиатеки</small>
+            </div>
+            <div class="card-body">
+                <div class="row row-cols-2 row-cols-md-3 g-3">
+                    {% for rec in random_videos %}
+                    <div class="col">
+                        <a href="/video/{{ rec.hash }}" class="text-decoration-none">
+                            <div class="card h-100 border-secondary recommendation-card">
+                                <div class="card-body p-3">
+                                    <h6 class="card-title text-truncate mb-2">{{ rec.title }}</h6>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-muted text-truncate">{{ rec.uploader }}</small>
+                                        <span class="badge bg-secondary">{{ rec.duration_str }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
     
-    <!-- Информация о видео -->
     <div class="col-lg-4">
         <div class="card shadow">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">
-                    <i class="bi bi-info-circle"></i> Информация
-                </h5>
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Информация</h5>
             </div>
             <div class="card-body">
                 <h4 class="card-title">{{ video.title }}</h4>
@@ -94,22 +181,13 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/video-player.js"></script>
 <script>
-// Автозапуск видео при загрузке страницы (опционально)
 document.addEventListener('DOMContentLoaded', function() {
-    const video = document.querySelector('video');
-    if (video) {
-        // Сохраняем позицию просмотра при перезагрузке
-        const savedTime = localStorage.getItem('video_{{ video.hash }}_time');
-        if (savedTime) {
-            video.currentTime = parseFloat(savedTime);
-        }
-        
-        // Сохраняем позицию при изменении
-        video.addEventListener('timeupdate', function() {
-            localStorage.setItem('video_{{ video.hash }}_time', video.currentTime);
-        });
-    }
+    const container = document.querySelector('#player-container');
+    const videoHash = container.dataset.hash;
+    const videoTitle = container.dataset.title;
+    window.player = new TubePlayer(videoHash, videoTitle);
 });
 </script>
 {% endblock %}
