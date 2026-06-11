@@ -28,18 +28,11 @@
     
     .task-row.active {
         border-left-color: #ffc107;
-        background-color: rgba(255, 193, 7, 0.05);
+        background-color: var(--table-hover-bg);
     }
     
     .task-row.queued {
         border-left-color: #6c757d;
-    }
-    
-    .worker-badge {
-        font-family: monospace;
-        font-size: 0.85em;
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
     }
     
     .url-truncate {
@@ -47,6 +40,7 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        display: inline-block;
     }
     
     .age-badge {
@@ -58,7 +52,7 @@
 
 {% block content %}
 <div class="container-fluid py-4">
-    <!-- Заголовок -->
+    <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="h2 mb-1">
@@ -83,7 +77,7 @@
     </div>
     {% else %}
     
-    <!-- Статус системы -->
+    <!-- System Status -->
     <div class="alert alert-{% if queue_info.is_running %}success{% else %}danger{% endif %} mb-4">
         <div class="d-flex align-items-center">
             <i class="bi bi-{% if queue_info.is_running %}play-circle{% else %}stop-circle{% endif %} me-3 fs-4"></i>
@@ -98,9 +92,9 @@
         </div>
     </div>
     
-    <!-- Основные метрики -->
+    <!-- Main Metrics -->
     <div class="row g-3 mb-4">
-        <!-- Воркеры -->
+        <!-- Workers -->
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card metric-card border-info">
                 <div class="card-body">
@@ -119,7 +113,7 @@
             </div>
         </div>
         
-        <!-- Активные задачи -->
+        <!-- Active Tasks -->
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card metric-card border-warning">
                 <div class="card-body">
@@ -138,7 +132,7 @@
             </div>
         </div>
         
-        <!-- Задачи в очереди -->
+        <!-- Queued Tasks -->
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card metric-card border-secondary">
                 <div class="card-body">
@@ -157,7 +151,7 @@
             </div>
         </div>
         
-        <!-- Завершено -->
+        <!-- Completed -->
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card metric-card border-success">
                 <div class="card-body">
@@ -176,7 +170,7 @@
             </div>
         </div>
         
-        <!-- Ошибки -->
+        <!-- Failed -->
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card metric-card border-danger">
                 <div class="card-body">
@@ -195,7 +189,7 @@
             </div>
         </div>
         
-        <!-- Повторные попытки -->
+        <!-- Retries -->
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card metric-card border-warning">
                 <div class="card-body">
@@ -215,11 +209,11 @@
         </div>
     </div>
     
-    <!-- Распределение воркеров -->
+    <!-- Worker Distribution -->
     <div class="row mb-4">
         <div class="col-12">
             <div class="card shadow-sm">
-                <div class="card-header bg-white border-bottom">
+                <div class="card-header bg-secondary text-white">
                     <h5 class="mb-0">
                         <i class="bi bi-diagram-3 me-2"></i>Распределение воркеров
                     </h5>
@@ -267,15 +261,15 @@
         </div>
     </div>
     
-    <!-- Активные задачи -->
+    <!-- Active Tasks -->
     <div class="row mb-4">
         <div class="col-12">
             <div class="card shadow-sm">
-                <div class="card-header bg-warning text-white">
+                <div class="card-header bg-warning text-dark">
                     <h5 class="mb-0">
                         <i class="bi bi-activity me-2"></i>Активные задачи
                         {% if queue_info.active_tasks > 0 %}
-                        <span class="badge bg-light text-dark ms-2">{{ queue_info.active_tasks }}</span>
+                        <span class="badge bg-dark ms-2">{{ queue_info.active_tasks }}</span>
                         {% endif %}
                     </h5>
                 </div>
@@ -312,7 +306,7 @@
                                     </td>
                                     <td>
                                         {% if task.retry_count > 0 %}
-                                        <span class="badge bg-warning">{{ task.retry_count }}</span>
+                                        <span class="badge bg-warning text-dark">{{ task.retry_count }}</span>
                                         {% else %}
                                         <span class="text-muted">0</span>
                                         {% endif %}
@@ -349,7 +343,7 @@
         </div>
     </div>
     
-    <!-- Очередь задач -->
+    <!-- Task Queue -->
     <div class="row">
         <div class="col-12">
             <div class="card shadow-sm">
@@ -389,7 +383,7 @@
                                     </td>
                                     <td>
                                         {% if task.retry_count > 0 %}
-                                        <span class="badge bg-warning">{{ task.retry_count }}</span>
+                                        <span class="badge bg-warning text-dark">{{ task.retry_count }}</span>
                                         {% else %}
                                         <span class="text-muted">0</span>
                                         {% endif %}
@@ -408,7 +402,7 @@
                         </table>
                     </div>
                     {% if queue_info.queued_tasks > 20 %}
-                    <div class="card-footer bg-white">
+                    <div class="card-footer">
                         <div class="text-center">
                             <small class="text-muted">
                                 Показано 20 из {{ queue_info.queued_tasks }} задач
@@ -434,10 +428,10 @@
 </div>
 
 <script>
-// Автообновление каждые 5 секунд
-let refreshTimer = setTimeout(() => location.reload(), 5000);
+// Auto-refresh every 10 seconds
+let refreshTimer = setTimeout(() => location.reload(), 10000);
 
-// Сбрасываем таймер при активности пользователя
+// Reset timer on user activity
 function resetRefreshTimer() {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => location.reload(), 10000);
@@ -447,18 +441,19 @@ document.addEventListener('mousemove', resetRefreshTimer);
 document.addEventListener('keypress', resetRefreshTimer);
 document.addEventListener('click', resetRefreshTimer);
 
-// Показываем уведомление если есть зависшие задачи
+// Highlight long-running tasks
 document.addEventListener('DOMContentLoaded', function() {
     const longTasks = document.querySelectorAll('.age-badge');
     longTasks.forEach(badge => {
         const age = parseInt(badge.textContent);
-        if (age > 300) { // 5 минут
+        if (age > 300) { // 5 minutes
             badge.classList.remove('bg-secondary');
             badge.classList.add('bg-danger');
             badge.innerHTML = `<i class="bi bi-exclamation-triangle me-1"></i>${age} сек`;
-        } else if (age > 60) { // 1 минута
+        } else if (age > 60) { // 1 minute
             badge.classList.remove('bg-secondary');
             badge.classList.add('bg-warning');
+            badge.classList.add('text-dark');
         }
     });
 });
