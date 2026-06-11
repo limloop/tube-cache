@@ -1,32 +1,51 @@
 """
-Оптимизированные API эндпоинты
+Video Server API - Main Application
+
+Provides endpoints for video management, streaming, and thumbnail generation.
 """
+
 from fastapi import FastAPI, HTTPException, Query, Request, BackgroundTasks
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from typing import Optional
-from datetime import datetime
+from typing import Optional, Dict, Any
 from pathlib import Path
+
 from app.config import settings
 from app.database import db
 from app.queue import queue
 from app.storage import storage
-from app.utils import generate_video_hash, get_download_config_for_url, normalize_title, normalize_video_url, check_video_file_integrity, check_video_file_integrity_extended, get_date_sort_key
-from app.models import VideoStatus, VideoRequest, TaskStatus, VideoMetadata, StorageInfo
+from app.utils import (
+    generate_video_hash, 
+    get_download_config_for_url, 
+    normalize_title, 
+    normalize_video_url, 
+    check_video_file_integrity, 
+    check_video_file_integrity_extended, 
+    get_date_sort_key
+)
+from app.models import VideoStatus, TaskStatus, VideoMetadata
 from app.webui import router as webui_router
+from app.i18n import I18nMiddleware
 from app import logger
 
 
-# Создаем приложение FastAPI
+# ============================================
+# Application Setup
+# ============================================
+
 app = FastAPI(
     title="Video Server API",
-    version="1.0.0",
+    description="Self-hosted video cache and streaming server",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
 
-# Настраиваем CORS
+# Add i18n middleware (reads language from cookie)
+app.add_middleware(I18nMiddleware)
+
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,81 +54,142 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Подключаем статические файлы
+# Mount static files
 static_path = Path(__file__).parent.parent / "app" / "static"
-static_path.mkdir(exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(Path(__file__).parent.parent / "app" / "static")), name="static")
+static_path.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
+# Include web interface router
 app.include_router(webui_router)
+
+
+# ============================================
+# Startup & Shutdown Events
+# ============================================
 
 @app.on_event("startup")
 async def startup_event():
-    """Инициализация при запуске"""
+    """
+    Initialize application on startup:
+    - Connect to database
+    - Start download queue
+    - Start storage monitoring
+    """
     try:
-        # Подключаем базу данных
+        # Connect to database
         await db.connect()
         
-        # Запускаем очередь
+        # Start download queue
         await queue.start()
 
-        # Запускаем мониторинг хранилища
+        # Start storage monitoring
         await storage.start_monitoring()
         
-        logger.info("✅ Сервер запущен")
-        logger.info(f"📁 Хранилище: {settings.storage.base_path}")
-        logger.info(f"🌐 Сервер: http://{settings.server.host}:{settings.server.port}")
+        # Check dependencies
+        await _check_dependencies()
+        
+        logger.info("✅ Video Server started successfully")
+        logger.info(f"📁 Storage path: {settings.storage.base_path}")
+        logger.info(f"🌐 Server: http://{settings.server.host}:{settings.server.port}")
         
     except Exception as e:
-        logger.error(f"❌ Ошибка запуска приложения: {e}")
+        logger.error(f"❌ Startup error: {e}")
         raise
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Очистка при завершении"""
+    """
+    Cleanup on shutdown:
+    - Stop download queue
+    - Close database connection
+    """
     try:
         await queue.stop()
         await db.close()
-        logger.info("🛑 Сервер остановлен")
+        await storage.stop_monitoring()
+        logger.info("🛑 Video Server stopped")
     except Exception as e:
-        logger.error(f"Ошибка остановки приложения: {e}")
+        logger.error(f"Shutdown error: {e}")
+
+
+async def _check_dependencies():
+    """Check required system dependencies"""
+    from app.utils import check_tool
+    
+    dependencies = {
+        'ffmpeg': ['ffmpeg', '-version'],
+        'yt-dlp': ['yt-dlp', '--version'],
+    }
+    
+    missing = []
+    for name, cmd in dependencies.items():
+        if not await check_tool(cmd[0], cmd[1:]):
+            missing.append(name)
+            logger.warning(f"⚠️ {name} not found in PATH")
+    
+    if missing:
+        logger.warning(f"Missing tools: {', '.join(missing)}")
+        if 'ffmpeg' in missing:
+            logger.warning("Thumbnail generation will be limited")
+
+
+# ============================================
+# API Endpoints
+# ============================================
 
 @app.get("/", include_in_schema=False)
 async def root():
-    """Корневой эндпоинт"""
-    return {"message": "Video Server API", "version": "1.0.0"}
+    """Root endpoint - API information"""
+    return {
+        "message": "Video Server API",
+        "version": "2.0.0",
+        "endpoints": {
+            "docs": "/docs",
+            "video": "/video?url=...",
+            "stream": "/stream/{hash}",
+            "info": "/info/{hash}",
+            "queue": "/queue/info",
+            "storage": "/storage/info"
+        }
+    }
+
 
 @app.get("/video", response_model=TaskStatus)
-async def request_video(url: str = Query(..., description="URL видео")):
+async def request_video(url: str = Query(..., description="Video URL")):
     """
-    Запрашивает скачивание видео
+    Request video download.
+    
+    Returns task status immediately. If video is already cached,
+    returns stream URL. If not, adds to download queue.
     """
     try:
-        # Нормализуем URL
+        # Normalize URL
         normalized_url = normalize_video_url(url)
         if not normalized_url:
-            raise HTTPException(status_code=400, detail="Некорректный URL")
+            raise HTTPException(status_code=400, detail="Invalid URL")
         
         url = normalized_url
         
-        # Генерируем хеш
+        # Get format config and generate hash
         format_spec, _ = get_download_config_for_url(url)
         video_hash = generate_video_hash(url, format_spec)
         
-        # Проверяем в БД
+        # Check database
         video = await db.get_video(video_hash)
         
         if not video:
-            # Новая задача - создаём запись и добавляем в очередь
+            # New video - create record and add to queue
             await db.create_video(video_hash, url)
-            await cleanup_temp_files(video_hash)
+            await _cleanup_temp_files(video_hash)
             
             added = await queue.add_task(video_hash, url)
             
             if not added:
                 position = await queue.get_queue_position(video_hash)
-                message = f"Видео уже в очереди"
+                message = "Video already in queue"
                 if position is not None:
-                    message += f", позиция: {position + 1}"
+                    message += f", position: {position + 1}"
                 
                 return TaskStatus(
                     hash=video_hash,
@@ -120,36 +200,38 @@ async def request_video(url: str = Query(..., description="URL видео")):
             return TaskStatus(
                 hash=video_hash,
                 status=VideoStatus.PENDING,
-                message="Видео добавлено в очередь на загрузку"
+                message="Video added to download queue"
             )
         
-        # Проверяем статус
+        # Existing video - check status
         status = VideoStatus(video['status'])
         
         if status == VideoStatus.READY:
-            # Проверяем целостность файла
+            # Check if file exists
             file_path = await storage.find_video_path(video_hash)
             
             if not file_path or not file_path.exists():
-                logger.error(f"Файл отсутствует для готового видео: {video_hash}")
+                logger.error(f"File missing for ready video: {video_hash}")
                 await db.mark_video_deleted(video_hash)
                 
-                # Пересоздаём задачу
+                # Recreate task
                 await db.update_status(video_hash, VideoStatus.PENDING)
-                await cleanup_temp_files(video_hash)
+                await _cleanup_temp_files(video_hash)
                 await queue.add_task(video_hash, video['source_url'])
                 
                 return TaskStatus(
                     hash=video_hash,
                     status=VideoStatus.PENDING,
-                    message="Файл потерян, перезапуск загрузки"
+                    message="File lost, restarting download"
                 )
             
-            # Проверяем целостность
-            integrity_result = await check_video_file_integrity_extended(file_path, video.get('file_size'))
+            # Check integrity
+            integrity_result = await check_video_file_integrity_extended(
+                file_path, video.get('file_size')
+            )
             
             if not integrity_result['valid']:
-                logger.error(f"Файл повреждён: {video_hash}")
+                logger.error(f"Corrupted file: {video_hash}")
                 
                 try:
                     file_path.unlink()
@@ -158,69 +240,65 @@ async def request_video(url: str = Query(..., description="URL видео")):
                 
                 await db.update_status(video_hash, VideoStatus.FAILED)
                 
-                # Если у видео были попытки, считаем их
                 retry_count = video.get('retry_count', 0)
                 if retry_count < 3:
                     await db.update_status(video_hash, VideoStatus.PENDING)
-                    await cleanup_temp_files(video_hash)
+                    await _cleanup_temp_files(video_hash)
                     await queue.add_task(video_hash, video['source_url'])
                     
                     return TaskStatus(
                         hash=video_hash,
                         status=VideoStatus.PENDING,
-                        message=f"Файл повреждён, повторная попытка ({retry_count + 1}/3)"
+                        message=f"File corrupted, retry ({retry_count + 1}/3)"
                     )
                 else:
                     return TaskStatus(
                         hash=video_hash,
                         status=VideoStatus.FAILED,
-                        message="Видео повреждено и не может быть восстановлено"
+                        message="Video corrupted and cannot be recovered"
                     )
             
-            # Всё в порядке
+            # All good
             return TaskStatus(
                 hash=video_hash,
                 status=VideoStatus.READY,
                 stream_url=f"/stream/{video_hash}",
-                message="Видео готово к просмотру",
+                message="Video ready to watch",
                 file_size=video.get('file_size'),
                 duration=video.get('duration')
             )
         
         elif status == VideoStatus.FAILED:
-            # Проверяем, можно ли перезапустить
             retry_count = video.get('retry_count', 0)
             if retry_count < 3:
                 await db.update_status(video_hash, VideoStatus.PENDING)
-                await cleanup_temp_files(video_hash)
+                await _cleanup_temp_files(video_hash)
                 await queue.add_task(video_hash, video['source_url'])
                 
                 return TaskStatus(
                     hash=video_hash,
                     status=VideoStatus.PENDING,
-                    message=f"Перезапуск проваленной загрузки ({retry_count + 1}/3)"
+                    message=f"Restarting failed download ({retry_count + 1}/3)"
                 )
             else:
                 return TaskStatus(
                     hash=video_hash,
                     status=VideoStatus.FAILED,
-                    message="Загрузка провалилась после 3 попыток"
+                    message="Download failed after 3 attempts"
                 )
         
         elif status == VideoStatus.PENDING:
-            # Проверяем, есть ли задача в очереди
             position = await queue.get_queue_position(video_hash)
             
             if position is None:
-                # Задача потерялась, пересоздаём
-                logger.warning(f"Задача потеряна, пересоздаём: {video_hash[:12]}")
-                await cleanup_temp_files(video_hash)
+                logger.warning(f"Task lost, recreating: {video_hash[:12]}")
+                await _cleanup_temp_files(video_hash)
                 await queue.add_task(video_hash, video['source_url'])
                 position = await queue.get_queue_position(video_hash)
             
-            message = "Видео в очереди на загрузку"
+            message = "Video in download queue"
             if position is not None:
-                message += f", позиция: {position + 1}"
+                message += f", position: {position + 1}"
             
             return TaskStatus(
                 hash=video_hash,
@@ -229,112 +307,114 @@ async def request_video(url: str = Query(..., description="URL видео")):
             )
         
         elif status == VideoStatus.DOWNLOADING:
-            # Проверяем, активна ли задача в очереди
+            # Check if task is actually active
             queue_info = await queue.get_queue_info()
-            is_active = any(task['hash'].startswith(video_hash[:12]) 
-                          for task in queue_info.get('active_tasks_list', []))
+            is_active = any(
+                task['hash'].startswith(video_hash[:12]) 
+                for task in queue_info.get('active_tasks_list', [])
+            )
             
             if not is_active:
-                # Задача не активна, пересоздаём
-                logger.warning(f"Задача DOWNLOADING но не активна: {video_hash[:12]}")
+                logger.warning(f"Task DOWNLOADING but not active: {video_hash[:12]}")
                 await db.update_status(video_hash, VideoStatus.PENDING)
-                await cleanup_temp_files(video_hash)
+                await _cleanup_temp_files(video_hash)
                 await queue.add_task(video_hash, video['source_url'])
                 
                 return TaskStatus(
                     hash=video_hash,
                     status=VideoStatus.PENDING,
-                    message="Задача перезапущена"
+                    message="Task restarted"
                 )
             
             return TaskStatus(
                 hash=video_hash,
                 status=VideoStatus.DOWNLOADING,
-                message="Видео загружается"
+                message="Video is downloading"
             )
         
         else:
-            # Неизвестный статус
-            logger.warning(f"Неизвестный статус {status} для видео {video_hash}")
+            # Unknown status - recover
+            logger.warning(f"Unknown status {status} for {video_hash}")
             await db.update_status(video_hash, VideoStatus.PENDING)
-            await cleanup_temp_files(video_hash)
+            await _cleanup_temp_files(video_hash)
             await queue.add_task(video_hash, video['source_url'])
             
             return TaskStatus(
                 hash=video_hash,
                 status=VideoStatus.PENDING,
-                message="Неизвестный статус, перезапуск"
+                message="Unknown status, restarting"
             )
             
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Ошибка при обработке запроса видео {url}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Внутренняя ошибка сервера"
-        )
+        logger.error(f"Error processing video request {url}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-async def cleanup_temp_files(video_hash: str):
-    """Очищает только временные файлы"""
+
+async def _cleanup_temp_files(video_hash: str):
+    """Clean temporary files for a video"""
     try:
         temp_dir = Path(settings.storage.temp_path)
         for file in temp_dir.glob(f"*{video_hash}*"):
             try:
                 file.unlink()
+                logger.debug(f"Cleaned temp file: {file.name}")
             except:
                 pass
     except Exception as e:
-        logger.warning(f"Ошибка очистки временных файлов {video_hash}: {e}")
+        logger.warning(f"Failed to cleanup temp files for {video_hash}: {e}")
+
 
 @app.get("/stream/{video_hash}")
 async def stream_video(video_hash: str, request: Request):
     """
-    Стриминг видео по хешу
+    Stream video file with HTTP Range support.
     
-    Поддерживает HTTP Range запросы для перемотки
+    Supports seeking and partial content requests.
     """
-    # Проверяем наличие видео
+    # Check video exists
     video = await db.get_video(video_hash)
     
     if not video or VideoStatus(video['status']) != VideoStatus.READY:
-        raise HTTPException(status_code=404, detail="Видео не найдено")
+        raise HTTPException(status_code=404, detail="Video not found")
     
-    # Обновляем статистику просмотров
+    # Update access statistics
     await db.update_access(video_hash)
     
-    # Ищем файл
+    # Find file
     file_path = await storage.find_video_path(video_hash)
     
     if not file_path:
-        # Файл не найден, помечаем как удаленный
         await db.update_status(video_hash, VideoStatus.DELETED)
-        raise HTTPException(status_code=404, detail="Файл видео не найден")
+        raise HTTPException(status_code=404, detail="Video file not found")
     
+    # Check integrity
     if not check_video_file_integrity(file_path):
-        logger.error(f"Поврежденный файл при стриминге: {video_hash[:12]}...")
+        logger.error(f"Corrupted file during streaming: {video_hash[:12]}")
         
-        # Удаляем файл и обновляем статус
         try:
             file_path.unlink()
         except:
             pass
         
         await db.mark_video_deleted(video_hash)
-        raise HTTPException(status_code=410, detail="Файл поврежден, требуется повторная загрузка")
-
-
-    # Определяем MIME type
+        raise HTTPException(status_code=410, detail="File corrupted, re-download required")
+    
+    # Determine MIME type
     mime_type = "video/mp4"
-    if file_path.suffix == '.webm':
+    suffix = file_path.suffix.lower()
+    if suffix == '.webm':
         mime_type = "video/webm"
-    elif file_path.suffix == '.mkv':
+    elif suffix == '.mkv':
         mime_type = "video/x-matroska"
+    elif suffix == '.mp4':
+        mime_type = "video/mp4"
     
-    # Получаем очищенное название для скачивания
-    filename = f"{normalize_title(video.get('title', video_hash))}{file_path.suffix}"
+    # Get filename for download
+    filename = f"{normalize_title(video.get('title', video_hash))}{suffix}"
     
-    # Возвращаем файл с поддержкой Range запросов
+    # Return file with Range support
     return FileResponse(
         path=file_path,
         media_type=mime_type,
@@ -342,51 +422,59 @@ async def stream_video(video_hash: str, request: Request):
         content_disposition_type="inline"
     )
 
+
 @app.get("/info/{video_hash}", response_model=VideoMetadata)
 async def get_video_info(video_hash: str):
-    """Получает метаданные видео"""
+    """
+    Get video metadata from database.
+    """
     video = await db.get_video(video_hash)
     
     if not video:
-        raise HTTPException(status_code=404, detail="Видео не найдено")
+        raise HTTPException(status_code=404, detail="Video not found")
     
     return VideoMetadata(**video)
 
+
 @app.get("/health")
 async def health_check():
-    """Проверка здоровья приложения"""
+    """
+    Health check endpoint for monitoring.
+    """
     try:
-        # Проверяем соединение с БД
         await db.get_storage_stats()
-        
-        return {"status": "healthy", "service": "video-server"}
+        return {"status": "healthy", "service": "video-server", "version": "2.0.0"}
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Service unavailable")
 
+
 @app.get("/queue/info")
 async def get_queue_info():
-    """Получает информацию об очереди"""
+    """
+    Get detailed queue information.
+    """
     info = await queue.get_queue_info()
     return info
+
 
 @app.get("/storage/info")
 async def get_storage_info_detailed():
     """
-    Детальная информация о хранилище
+    Get detailed storage information with video statistics.
     """
     info = await storage.get_storage_info()
     
-    # Добавляем дополнительную информацию
+    # Add additional info
     videos = await db.get_all_ready_videos()
     
-    # Сортируем по дате последнего доступа
+    # Sort by last accessed
     def sort_key(item):
         return get_date_sort_key(item, 'last_accessed')
-
+    
     videos_sorted = sorted(videos, key=sort_key, reverse=True)
     
-    # Топ 10 самых старых видео (кандидаты на удаление)
+    # Top 10 oldest videos (candidates for cleanup)
     oldest_videos = videos_sorted[:10] if len(videos_sorted) > 10 else videos_sorted
     
     return {
@@ -394,26 +482,64 @@ async def get_storage_info_detailed():
         "total_videos": len(videos),
         "oldest_videos": [{
             "hash": v['hash'][:12] + '...',
-            "title": v.get('title', 'Без названия'),
+            "title": v.get('title', 'Untitled'),
             "last_accessed": v.get('last_accessed'),
             "access_count": v.get('access_count', 0),
             "file_size_mb": round(v.get('file_size', 0) / 1024**2, 2) if v.get('file_size') else 0,
         } for v in oldest_videos]
     }
 
+
 @app.post("/cleanup")
 async def trigger_cleanup():
     """
-    Ручная очистка хранилища
+    Manually trigger storage cleanup.
     """
     deleted = await storage.cleanup_old_videos()
     
-    # Получаем статистику после очистки
     info = await storage.get_storage_info()
     
     return {
-        "message": f"Очистка завершена, удалено {len(deleted)} видео",
+        "message": f"Cleanup completed, removed {len(deleted)} videos",
         "deleted_count": len(deleted),
-        "deleted_hashes": deleted[:10],  # Первые 10 хешей
+        "deleted_hashes": deleted,
         "storage_info": info
     }
+
+
+# ============================================
+# Thumbnail Endpoint (placeholder for Stage 5-6)
+# ============================================
+
+@app.get("/thumbnail/{video_hash}")
+async def get_thumbnail(
+    video_hash: str,
+    size: Optional[int] = Query(None, ge=64, le=1920, description="Thumbnail width in pixels")
+):
+    """
+    Get video thumbnail.
+    
+    Current implementation returns SVG placeholder.
+    Full implementation with FFmpeg will be added in Stage 5-6.
+    """
+    import hashlib
+    
+    # Generate colored SVG placeholder based on hash
+    color = "#" + hashlib.md5(video_hash.encode()).hexdigest()[:6]
+    target_size = size or 320
+    
+    svg = f'''<svg width="{target_size}" height="{target_size}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100%" height="100%" fill="{color}"/>
+        <circle cx="50%" cy="50%" r="25%" fill="rgba(255,255,255,0.2)"/>
+        <polygon points="40%,35% 40%,65% 65%,50%" fill="rgba(255,255,255,0.5)"/>
+        <text x="50%" y="75%" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="12" font-family="monospace">No thumbnail</text>
+    </svg>'''
+    
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "X-Thumbnail-Status": "placeholder"
+        }
+    )

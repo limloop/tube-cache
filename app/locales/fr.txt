@@ -1,0 +1,175 @@
+# ============================================
+# French Translations for Video Server
+# ============================================
+
+# Navigation
+nav_home=Accueil
+nav_videos=Toutes les vidéos
+nav_queue=File d'attente
+nav_storage=Stockage
+tagline=Serveur vidéo hors ligne
+
+# Common
+loading=Chargement...
+error=Erreur
+success=Succès
+cancel=Annuler
+save=Sauvegarder
+delete=Supprimer
+close=Fermer
+back=Retour
+search=Rechercher
+filter=Filtrer
+status=Statut
+actions=Actions
+unknown=Inconnu
+none=Aucun
+yes=Oui
+no=Non
+confirm=Confirmer
+warning=Avertissement
+info=Info
+details=Détails
+
+# Video status
+status_ready=Prêt
+status_pending=En file d'attente
+status_downloading=Téléchargement
+status_failed=Échoué
+status_deleted=Supprimé
+status_unknown=Inconnu
+
+# Buttons
+btn_download=Télécharger la vidéo
+btn_add_video=Ajouter une vidéo
+btn_view_all=Voir toutes les vidéos
+btn_check_queue=Voir la file d'attente
+btn_cleanup=Nettoyer les anciennes vidéos
+btn_retry=Réessayer
+btn_watch=Regarder
+btn_stream=Streamer
+btn_info=Infos
+btn_refresh=Actualiser
+btn_settings=Paramètres
+btn_continue=Continuer
+
+# Messages
+msg_video_added=Vidéo ajoutée à la file d'attente
+msg_video_ready=Vidéo prête à être regardée
+msg_no_videos=Aucune vidéo trouvée
+msg_no_results=Aucun résultat pour votre recherche
+msg_enter_url=Veuillez entrer une URL de vidéo valide
+msg_upload_first=Téléchargez votre première vidéo !
+msg_processing=Traitement en cours...
+msg_please_wait=Veuillez patienter...
+
+# Queue page
+queue_title=Système de téléchargement
+queue_subtitle=Gestion et surveillance de la file d'attente
+queue_system_active=Système actif
+queue_system_stopped=Système arrêté
+queue_info_unavailable=Informations de file d'attente temporairement indisponibles
+queue_active_tasks=Tâches actives
+queue_queued_tasks=Tâches en file d'attente
+queue_workers=Travailleurs
+queue_completed=Terminé
+queue_failed=Échoué
+queue_retries=Essais
+queue_no_active=Aucune tâche active
+queue_empty=La file d'attente est vide
+queue_workers_free=Tous les travailleurs sont libres
+queue_workers_distribution=Répartition des travailleurs
+queue_free_slots=Libre
+queue_of=de
+queue_total_workers=Total des travailleurs
+queue_running=En cours
+queue_max_concurrent=Max concurrent
+queue_hash=Hash
+queue_url=URL
+queue_worker=Travailleur
+queue_started_at=Démarré
+queue_started_at=Démarré à
+queue_duration=Durée
+queue_seconds=sec
+queue_added_at=Ajouté à
+queue_showing_first=Affichage des 20 premiers sur
+queue_tasks=tâches
+queue_no_tasks=Aucune tâche en attente
+queue_worker_name=Travailleur
+
+# Storage page
+storage_title=Stockage
+storage_usage=Utilisation du stockage
+storage_settings=Paramètres
+storage_used=Utilisé
+storage_free=Libre
+storage_max_size=Taille max
+storage_video_count=Nombre de vidéos
+storage_status_good=Bon
+storage_status_warning=Attention
+storage_status_critical=Critique
+storage_recommendations=Recommandations
+storage_cleanup_triggered=Nettoyage déclenché
+storage_cleanup_confirm=Êtes-vous sûr ? Cela supprimera les anciennes vidéos.
+storage_recommendation_good=Le stockage est sain. Aucun nettoyage nécessaire.
+storage_recommendation_warning=Envisagez de nettoyer les anciennes vidéos. Le nettoyage automatique s'exécutera lors des nouveaux téléchargements.
+storage_recommendation_critical=Nettoyez immédiatement ! Les nouveaux téléchargements pourraient échouer.
+storage_info_unavailable=Informations de stockage indisponibles
+storage_info_error=Impossible de récupérer les informations de stockage
+
+# Video page
+video_title=Titre
+video_info=Informations
+video_author=Auteur
+video_duration=Durée
+video_size=Taille
+video_format=Format
+video_views=Vues
+video_added=Ajouté le
+video_last_viewed=Dernière vue
+video_original_link=Lien original
+video_player_placeholder=Choisissez le mode de lecture
+video_play_video=Vidéo
+video_play_audio=Audio
+video_navigation=Navigation
+video_previous=Précédent
+video_next=Suivant
+video_random_suggestion=Suggestions aléatoires
+from_media_library=De la médiathèque
+
+# Player controls
+player_speed=Vitesse de lecture
+player_audio_mode=Audio uniquement
+player_video_mode=Mode vidéo
+player_fullscreen=Plein écran
+player_mute=Couper le son
+player_volume=Volume
+
+# Forms
+form_url_label=URL de la vidéo
+form_url_placeholder=https://youtube.com/watch?v=...
+form_url_help=Sources supportées : YouTube, Vimeo et autres
+form_submit=Télécharger la vidéo
+
+# Errors
+error_404=Vidéo non trouvée
+error_invalid_url=URL invalide. Veuillez entrer un lien vidéo valide.
+error_server=Erreur interne du serveur
+error_file_missing=Fichier vidéo manquant
+error_file_corrupted=Fichier vidéo corrompu
+error_access_denied=Accès refusé
+error_timeout=Délai d'attente dépassé
+
+# Time
+time_just_now=À l'instant
+time_minute_ago=Il y a 1 minute
+time_minutes_ago=Il y a {count} minutes
+time_hour_ago=Il y a 1 heure
+time_hours_ago=Il y a {count} heures
+time_day_ago=Il y a 1 jour
+time_days_ago=Il y a {count} jours
+
+# Footer
+footer_github=GitHub
+footer_report_issue=Signaler un problème
+footer_documentation=Documentation

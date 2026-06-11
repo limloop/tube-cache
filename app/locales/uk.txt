@@ -1,0 +1,174 @@
+# ============================================
+# Ukrainian Translations for Video Server
+# ============================================
+
+# Navigation
+nav_home=Головна
+nav_videos=Всі відео
+nav_queue=Черга
+nav_storage=Сховище
+tagline=Автономний відеосервер
+
+# Common
+loading=Завантаження...
+error=Помилка
+success=Успішно
+cancel=Скасувати
+save=Зберегти
+delete=Видалити
+close=Закрити
+back=Назад
+search=Пошук
+filter=Фільтр
+status=Статус
+actions=Дії
+unknown=Невідомо
+none=Немає
+yes=Так
+no=Ні
+confirm=Підтвердити
+warning=Попередження
+info=Інформація
+details=Деталі
+
+# Video status
+status_ready=Готово
+status_pending=В черзі
+status_downloading=Завантажується
+status_failed=Помилка
+status_deleted=Видалено
+status_unknown=Невідомо
+
+# Buttons
+btn_download=Завантажити відео
+btn_add_video=Додати відео
+btn_view_all=Всі відео
+btn_check_queue=Перевірити чергу
+btn_cleanup=Очистити старі відео
+btn_retry=Повторити
+btn_watch=Дивитись
+btn_stream=Стрімити
+btn_info=Інфо
+btn_refresh=Оновити
+btn_settings=Налаштування
+btn_continue=Продовжити
+
+# Messages
+msg_video_added=Відео додано в чергу завантаження
+msg_video_ready=Відео готове до перегляду
+msg_no_videos=Відео не знайдено
+msg_no_results=Нічого не знайдено за вашим запитом
+msg_enter_url=Будь ласка, введіть коректне посилання на відео
+msg_upload_first=Завантажте перше відео!
+msg_processing=Обробка...
+msg_please_wait=Будь ласка, зачекайте...
+
+# Queue page
+queue_title=Система завантажень
+queue_subtitle=Керування та моніторинг черги завантажень
+queue_system_active=Система активна
+queue_system_stopped=Система зупинена
+queue_info_unavailable=Інформація про чергу тимчасово недоступна
+queue_active_tasks=Активні завдання
+queue_queued_tasks=В черзі
+queue_workers=Воркери
+queue_completed=Завершено
+queue_failed=Помилки
+queue_retries=Повтори
+queue_no_active=Немає активних завдань
+queue_empty=Черга порожня
+queue_workers_free=Всі воркери вільні
+queue_workers_distribution=Розподіл воркерів
+queue_free_slots=Вільно
+queue_of=з
+queue_total_workers=Всього воркерів
+queue_running=Працюють
+queue_max_concurrent=Макс. паралельно
+queue_hash=Хеш
+queue_url=URL
+queue_worker=Воркер
+queue_started_at=Розпочато
+queue_duration=Триває
+queue_seconds=сек
+queue_added_at=Додано
+queue_showing_first=Показано перші 20 з
+queue_tasks=завдань
+queue_no_tasks=Немає завдань, що очікують обробки
+queue_worker_name=Воркер
+
+# Storage page
+storage_title=Сховище
+storage_usage=Використання сховища
+storage_settings=Налаштування
+storage_used=Використано
+storage_free=Вільно
+storage_max_size=Макс. розмір
+storage_video_count=Кількість відео
+storage_status_good=Добре
+storage_status_warning=Увага
+storage_status_critical=Критично
+storage_recommendations=Рекомендації
+storage_cleanup_triggered=Запущено очищення
+storage_cleanup_confirm=Ви впевнені? Це видалить старі відео.
+storage_recommendation_good=Сховище в порядку. Очищення не потрібне.
+storage_recommendation_warning=Рекомендується очистити старі відео. Автоочищення при нових завантаженнях.
+storage_recommendation_critical=Очистіть негайно! Нові завантаження можуть не початись.
+storage_info_unavailable=Інформація про сховище недоступна
+storage_info_error=Не вдалося отримати інформацію про сховище
+
+# Video page
+video_title=Назва
+video_info=Інформація
+video_author=Автор
+video_duration=Тривалість
+video_size=Розмір
+video_format=Формат
+video_views=Переглядів
+video_added=Додано
+video_last_viewed=Останній перегляд
+video_original_link=Оригінальне посилання
+video_player_placeholder=Виберіть режим відтворення
+video_play_video=Відео
+video_play_audio=Аудіо
+video_navigation=Навігація
+video_previous=Попереднє
+video_next=Наступне
+video_random_suggestion=Випадкова добірка
+from_media_library=З медіатеки
+
+# Player controls
+player_speed=Швидкість відтворення
+player_audio_mode=Тільки аудіо
+player_video_mode=Відеорежим
+player_fullscreen=Повний екран
+player_mute=Вимкнути звук
+player_volume=Гучність
+
+# Forms
+form_url_label=Посилання на відео
+form_url_placeholder=https://youtube.com/watch?v=...
+form_url_help=Підтримувані джерела: YouTube, Vimeo та інші
+form_submit=Завантажити відео
+
+# Errors
+error_404=Відео не знайдено
+error_invalid_url=Неправильне посилання. Введіть коректне посилання на відео.
+error_server=Внутрішня помилка сервера
+error_file_missing=Файл відео відсутній
+error_file_corrupted=Файл відео пошкоджено
+error_access_denied=Доступ заборонено
+error_timeout=Таймаут запиту
+
+# Time
+time_just_now=Щойно
+time_minute_ago=1 хвилину тому
+time_minutes_ago={count} хвилини тому
+time_hour_ago=1 годину тому
+time_hours_ago={count} годин тому
+time_day_ago=1 день тому
+time_days_ago={count} днів тому
+
+# Footer
+footer_github=GitHub
+footer_report_issue=Повідомити про проблему
+footer_documentation=Документація

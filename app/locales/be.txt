@@ -1,0 +1,174 @@
+# ============================================
+# Belarusian Translations for Video Server
+# ============================================
+
+# Navigation
+nav_home=Галоўная
+nav_videos=Усе відэа
+nav_queue=Чарга
+nav_storage=Сховішча
+tagline=Аўтаномны відэасэрвер
+
+# Common
+loading=Загрузка...
+error=Памылка
+success=Паспяхова
+cancel=Адмяніць
+save=Захаваць
+delete=Выдаліць
+close=Закрыць
+back=Назад
+search=Пошук
+filter=Фільтр
+status=Статус
+actions=Дзеянні
+unknown=Невядома
+none=Няма
+yes=Так
+no=Не
+confirm=Пацвердзіць
+warning=Папярэджанне
+info=Інфармацыя
+details=Дэталі
+
+# Video status
+status_ready=Гатова
+status_pending=У чарзе
+status_downloading=Загружаецца
+status_failed=Памылка
+status_deleted=Выдалена
+status_unknown=Невядома
+
+# Buttons
+btn_download=Загрузіць відэа
+btn_add_video=Дадаць відэа
+btn_view_all=Усе відэа
+btn_check_queue=Праверыць чаргу
+btn_cleanup=Ачысціць старыя відэа
+btn_retry=Паўтарыць
+btn_watch=Глядзець
+btn_stream=Стрыміць
+btn_info=Інфо
+btn_refresh=Абнавіць
+btn_settings=Налады
+btn_continue=Працягнуць
+
+# Messages
+msg_video_added=Відэа дададзена ў чаргу загрузкі
+msg_video_ready=Відэа гатова да прагляду
+msg_no_videos=Відэа не знойдзены
+msg_no_results=Нічога не знойдзена па вашым запыце
+msg_enter_url=Калі ласка, увядзіце карэктную спасылку на відэа
+msg_upload_first=Загрузіце першае відэа!
+msg_processing=Апрацоўка...
+msg_please_wait=Калі ласка, пачакайце...
+
+# Queue page
+queue_title=Сістэма загрузак
+queue_subtitle=Кіраванне і маніторынг чаргі загрузак
+queue_system_active=Сістэма актыўная
+queue_system_stopped=Сістэма спынена
+queue_info_unavailable=Інфармацыя пра чаргу часова недаступная
+queue_active_tasks=Актыўныя задачы
+queue_queued_tasks=У чарзе
+queue_workers=Воркеры
+queue_completed=Завершана
+queue_failed=Памылкі
+queue_retries=Паўторы
+queue_no_active=Няма актыўных задач
+queue_empty=Чарга пустая
+queue_workers_free=Усе воркеры свабодныя
+queue_workers_distribution=Размеркаванне воркераў
+queue_free_slots=Свабодна
+queue_of=з
+queue_total_workers=Усяго воркераў
+queue_running=Працуюць
+queue_max_concurrent=Макс. паралельна
+queue_hash=Хэш
+queue_url=URL
+queue_worker=Воркер
+queue_started_at=Пачата
+queue_duration=Трывае
+queue_seconds=сек
+queue_added_at=Дададзена
+queue_showing_first=Паказана першых 20 з
+queue_tasks=задач
+queue_no_tasks=Няма задач, якія чакаюць апрацоўкі
+queue_worker_name=Воркер
+
+# Storage page
+storage_title=Сховішча
+storage_usage=Выкарыстанне сховішча
+storage_settings=Налады
+storage_used=Выкарыстана
+storage_free=Свабодна
+storage_max_size=Макс. памер
+storage_video_count=Колькасць відэа
+storage_status_good=Добра
+storage_status_warning=Увага
+storage_status_critical=Крытычна
+storage_recommendations=Рэкамендацыі
+storage_cleanup_triggered=Запушчана ачыстка
+storage_cleanup_confirm=Вы ўпэўнены? Гэта выдаліць старыя відэа.
+storage_recommendation_good=Сховішча ў парадку. Ачыстка не патрэбна.
+storage_recommendation_warning=Рэкамендуецца ачысціць старыя відэа. Аўтаачыстка пры новых загрузках.
+storage_recommendation_critical=Ачысціце неадкладна! Новыя загрузкі могуць не пачацца.
+storage_info_unavailable=Інфармацыя пра сховішча недаступная
+storage_info_error=Не атрымалася атрымаць інфармацыю пра сховішча
+
+# Video page
+video_title=Назва
+video_info=Інфармацыя
+video_author=Аўтар
+video_duration=Працягласць
+video_size=Памер
+video_format=Фармат
+video_views=Праглядаў
+video_added=Дададзена
+video_last_viewed=Апошні прагляд
+video_original_link=Арыгінальная спасылка
+video_player_placeholder=Абярыце рэжым прайгравання
+video_play_video=Відэа
+video_play_audio=Аўдыё
+video_navigation=Навігацыя
+video_previous=Папярэдняе
+video_next=Наступнае
+video_random_suggestion=Выпадковая падборка
+from_media_library=З медыятэкі
+
+# Player controls
+player_speed=Хуткасць прайгравання
+player_audio_mode=Толькі аўдыё
+player_video_mode=Відэарэжым
+player_fullscreen=Поўны экран
+player_mute=Выключыць гук
+player_volume=Гучнасць
+
+# Forms
+form_url_label=Спасылка на відэа
+form_url_placeholder=https://youtube.com/watch?v=...
+form_url_help=Падтрымліваюцца крыніцы: YouTube, Vimeo і іншыя
+form_submit=Загрузіць відэа
+
+# Errors
+error_404=Відэа не знойдзена
+error_invalid_url=Няправільная спасылка. Калі ласка, увядзіце карэктную спасылку на відэа.
+error_server=Унутраная памылка сервера
+error_file_missing=Файл відэа адсутнічае
+error_file_corrupted=Файл відэа пашкоджаны
+error_access_denied=Доступ забаронены
+error_timeout=Таймаўт запыту
+
+# Time
+time_just_now=Толькі што
+time_minute_ago=1 хвіліну таму
+time_minutes_ago={count} хвіліны таму
+time_hour_ago=1 гадзіну таму
+time_hours_ago={count} гадзін таму
+time_day_ago=1 дзень таму
+time_days_ago={count} дзён таму
+
+# Footer
+footer_github=GitHub
+footer_report_issue=Паведаміць аб праблеме
+footer_documentation=Дакументацыя

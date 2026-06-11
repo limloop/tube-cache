@@ -1,0 +1,174 @@
+# ============================================
+# English Translations for Video Server
+# ============================================
+
+# Navigation
+nav_home=Home
+nav_videos=All Videos
+nav_queue=Queue
+nav_storage=Storage
+tagline=Offline Video Server
+
+# Common
+loading=Loading...
+error=Error
+success=Success
+cancel=Cancel
+save=Save
+delete=Delete
+close=Close
+back=Back
+search=Search
+filter=Filter
+status=Status
+actions=Actions
+unknown=Unknown
+none=None
+yes=Yes
+no=No
+confirm=Confirm
+warning=Warning
+info=Info
+details=Details
+
+# Video status
+status_ready=Ready
+status_pending=In Queue
+status_downloading=Downloading
+status_failed=Failed
+status_deleted=Deleted
+status_unknown=Unknown
+
+# Buttons
+btn_download=Download Video
+btn_add_video=Add Video
+btn_view_all=View All Videos
+btn_check_queue=Check Queue
+btn_cleanup=Clean Old Videos
+btn_retry=Retry
+btn_watch=Watch
+btn_stream=Stream
+btn_info=Info
+btn_refresh=Refresh
+btn_settings=Settings
+btn_continue=Continue
+
+# Messages
+msg_video_added=Video added to download queue
+msg_video_ready=Video is ready to watch
+msg_no_videos=No videos found
+msg_no_results=No results found for your search
+msg_enter_url=Please enter a valid video URL
+msg_upload_first=Upload your first video!
+msg_processing=Processing...
+msg_please_wait=Please wait...
+
+# Queue page
+queue_title=Download System
+queue_subtitle=Download queue management and monitoring
+queue_system_active=System Active
+queue_system_stopped=System Stopped
+queue_info_unavailable=Queue information temporarily unavailable
+queue_active_tasks=Active Tasks
+queue_queued_tasks=Queued Tasks
+queue_workers=Workers
+queue_completed=Completed
+queue_failed=Failed
+queue_retries=Retries
+queue_no_active=No active tasks
+queue_empty=Queue is empty
+queue_workers_free=All workers are free
+queue_workers_distribution=Worker Distribution
+queue_free_slots=Free
+queue_of=of
+queue_total_workers=Total workers
+queue_running=Running
+queue_max_concurrent=Max concurrent
+queue_hash=Hash
+queue_url=URL
+queue_worker=Worker
+queue_started_at=Started
+queue_duration=Duration
+queue_seconds=sec
+queue_added_at=Added
+queue_showing_first=Showing first 20 of
+queue_tasks=tasks
+queue_no_tasks=No tasks waiting for processing
+queue_worker_name=Worker
+
+# Storage page
+storage_title=Storage
+storage_usage=Storage Usage
+storage_settings=Settings
+storage_used=Used
+storage_free=Free
+storage_max_size=Max Size
+storage_video_count=Video Count
+storage_status_good=Good
+storage_status_warning=Warning
+storage_status_critical=Critical
+storage_recommendations=Recommendations
+storage_cleanup_triggered=Cleanup triggered
+storage_cleanup_confirm=Are you sure? This will delete old videos.
+storage_recommendation_good=Storage is healthy. No cleanup needed.
+storage_recommendation_warning=Consider cleaning old videos. Auto-cleanup will run on new downloads.
+storage_recommendation_critical=Clean up immediately! New downloads may fail.
+storage_info_unavailable=Storage information unavailable
+storage_info_error=Could not retrieve storage information
+
+# Video page
+video_title=Title
+video_info=Information
+video_author=Author
+video_duration=Duration
+video_size=Size
+video_format=Format
+video_views=Views
+video_added=Added
+video_last_viewed=Last Viewed
+video_original_link=Original Link
+video_player_placeholder=Choose playback mode
+video_play_video=Video
+video_play_audio=Audio
+video_navigation=Navigation
+video_previous=Previous
+video_next=Next
+video_random_suggestion=Random Suggestions
+from_media_library=From media library
+
+# Player controls
+player_speed=Playback speed
+player_audio_mode=Audio only
+player_video_mode=Video mode
+player_fullscreen=Fullscreen
+player_mute=Mute
+player_volume=Volume
+
+# Forms
+form_url_label=Video URL
+form_url_placeholder=https://youtube.com/watch?v=...
+form_url_help=Supported sources: YouTube, Vimeo, and others
+form_submit=Download Video
+
+# Errors
+error_404=Video not found
+error_invalid_url=Invalid URL. Please enter a valid video link.
+error_server=Internal server error
+error_file_missing=Video file is missing
+error_file_corrupted=Video file is corrupted
+error_access_denied=Access denied
+error_timeout=Request timeout
+
+# Time
+time_just_now=Just now
+time_minute_ago=1 minute ago
+time_minutes_ago={count} minutes ago
+time_hour_ago=1 hour ago
+time_hours_ago={count} hours ago
+time_day_ago=1 day ago
+time_days_ago={count} days ago
+
+# Footer
+footer_github=GitHub
+footer_report_issue=Report Issue
+footer_documentation=Documentation

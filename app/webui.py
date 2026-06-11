@@ -1,109 +1,179 @@
 """
-Web интерфейс для Video Server
+Web interface for Video Server
 """
 from fastapi import APIRouter, Request, Query, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional, List
 import math
+import random
 from pathlib import Path
-import os
-import time
 from datetime import datetime
+
 from app.database import db
 from app.queue import queue
+from app.storage import storage
 from app.utils import normalize_video_url, get_date_sort_key
 from app.models import VideoStatus
+from app.i18n import get_language_switcher_context, get_language_from_request
 from app import logger
 
 router = APIRouter()
 
-# Настраиваем шаблоны
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "app" / "templates"))
+# Setup templates
+TEMPLATES_DIR = Path(__file__).parent.parent / "app" / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
-# Фильтр для timestamp
+# ============================================
+# Custom Template Context with Language Support
+# ============================================
+
+def get_base_context(request: Request) -> dict:
+    """Get common context variables for all templates with translation function"""
+    current_lang = get_language_from_request(request)
+    
+    # Create a translation function that captures the current language
+    def _translate(key: str, **kwargs) -> str:
+        from app.i18n import translate
+        return translate(key, current_lang, **kwargs)
+    
+    return {
+        'request': request,
+        '_': _translate,  # Pass language-aware translate function
+        **get_language_switcher_context(request)
+    }
+
+
+# ============================================
+# Template Filters
+# ============================================
+
 def timestamp_to_time(timestamp):
+    """Convert timestamp to time string"""
     if not timestamp:
         return "--:--:--"
     try:
-        return datetime.fromtimestamp(timestamp).strftime('%H:%M:%S')
+        if isinstance(timestamp, (int, float)):
+            return datetime.fromtimestamp(timestamp).strftime('%H:%M:%S')
+        elif isinstance(timestamp, str):
+            dt = datetime.fromisoformat(timestamp.replace(' ', 'T'))
+            return dt.strftime('%H:%M:%S')
+        return "--:--:--"
     except:
         return "--:--:--"
 
+
+def format_duration(seconds: Optional[float]) -> str:
+    """Format duration in seconds to HH:MM:SS or MM:SS"""
+    if not seconds:
+        return "Unknown"
+    
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
+# Note: get_status_text and get_status_badge_class need translation
+# They will be defined as functions that take language parameter
+# For now, keep simple or move to template
+
+# Register filters
 templates.env.filters["timestamp_to_time"] = timestamp_to_time
+templates.env.filters["format_duration"] = format_duration
+
+
+# ============================================
+# Helper Functions
+# ============================================
+
+def format_file_size(size_bytes: Optional[int]) -> str:
+    """Format file size to human readable"""
+    if not size_bytes:
+        return "Unknown"
+    
+    if size_bytes >= 1024**3:
+        return f"{size_bytes / 1024**3:.2f} GB"
+    elif size_bytes >= 1024**2:
+        return f"{size_bytes / 1024**2:.2f} MB"
+    elif size_bytes >= 1024:
+        return f"{size_bytes / 1024:.2f} KB"
+    return f"{size_bytes} B"
+
+
+# ============================================
+# Page Routes
+# ============================================
 
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    """
-    Главная страница - форма для загрузки видео
-    """
-    # Получаем информацию об очереди для отображения
+    """Home page - video download form"""
     queue_info = await queue.get_queue_info() if hasattr(queue, 'get_queue_info') else {}
     
-    # Получаем активные задачи
+    # Get active tasks for display
     active_tasks = []
     if queue_info:
         active_tasks = [
             {
                 'hash': task['hash'][:12] + '...',
                 'url': task['url'][:50] + '...' if len(task['url']) > 50 else task['url'],
-                'position': i
+                'position': i + 1
             }
-            for i, task in enumerate(queue_info.get('queue', [])[:5])  # Первые 5 задач
+            for i, task in enumerate(queue_info.get('queue', [])[:5])
         ]
     
     return templates.TemplateResponse("index.html", {
-        "request": request,
+        **get_base_context(request),
         "active_tasks": active_tasks,
         "queue_info": queue_info
     })
 
+
 @router.post("/download", response_class=HTMLResponse)
 async def download_video(request: Request, url: str = Form(...)):
-    """
-    Обработка формы загрузки видео
-    """
-    # Нормализуем URL
+    """Handle video download form submission"""
     normalized_url = normalize_video_url(url)
     
     if not normalized_url:
+        context = get_base_context(request)
         return templates.TemplateResponse("error.html", {
-            "request": request,
-            "error": "Некорректный URL. Пожалуйста, введите валидную ссылку на видео."
+            **context,
+            "error": context['_']('invalid_url')
         })
     
-    # Перенаправляем на API endpoint
     return RedirectResponse(
         url=f"/video?url={normalized_url}",
-        status_code=303  # See Other
+        status_code=303
     )
+
 
 @router.get("/videos", response_class=HTMLResponse)
 async def list_videos(
     request: Request,
     page: int = Query(1, ge=1),
     search: str = Query(""),
-    status: str = Query("ready")
+    status_filter: str = Query("ready", alias="status")
 ):
-    """
-    Список всех видео с пагинацией и поиском
-    """
-    # Получаем все видео из БД
-    if status == "ready":
+    """List all videos with pagination and search"""
+    # Get videos based on filter
+    if status_filter == "ready":
         all_videos = await db.get_all_ready_videos()
-    elif status == "pending":
+    elif status_filter == "pending":
         all_videos = await db.get_videos_by_status(VideoStatus.PENDING)
-    elif status == "downloading":
+    elif status_filter == "downloading":
         all_videos = await db.get_videos_by_status(VideoStatus.DOWNLOADING)
-    elif status == "failed":
+    elif status_filter == "failed":
         all_videos = await db.get_videos_by_status(VideoStatus.FAILED)
-    elif status == "deleted":
+    elif status_filter == "deleted":
         all_videos = await db.get_videos_by_status(VideoStatus.DELETED)
     else:
         all_videos = await db.get_all_videos()
     
-    # Фильтрация по поиску
+    # Filter by search
     if search:
         search_lower = search.lower()
         all_videos = [
@@ -111,139 +181,163 @@ async def list_videos(
             if search_lower in (v.get('title', '').lower() or '') or
                search_lower in (v.get('uploader', '').lower() or '')
         ]
-
-    # Сортировка
-    def sort_key(item):
-        return get_date_sort_key(item, 'created_at')
-
-    all_videos = sorted(all_videos, key=sort_key, reverse=True)
     
-    # Пагинация
+    # Sort by creation date (newest first)
+    all_videos.sort(key=lambda x: get_date_sort_key(x, 'created_at'), reverse=True)
+    
+    # Pagination
     page_size = 20
     total_videos = len(all_videos)
-    total_pages = math.ceil(total_videos / page_size) if total_videos > 0 else 1
+    total_pages = max(1, math.ceil(total_videos / page_size))
     
-    # Корректируем номер страницы
-    if page > total_pages:
-        page = total_pages
+    # Adjust page if out of bounds
+    page = max(1, min(page, total_pages))
     
-    # Получаем видео для текущей страницы
+    # Get videos for current page
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     videos = all_videos[start_idx:end_idx]
     
-    # Форматируем данные для шаблона
+    # Get translate function for status text
+    context = get_base_context(request)
+    _ = context['_']
+    
+    # Format videos for template
     formatted_videos = []
     for video in videos:
-        file_size = video.get('file_size')
-        if file_size:
-            if file_size >= 1024**3:  # GB
-                size_str = f"{file_size / 1024**3:.1f} GB"
-            elif file_size >= 1024**2:  # MB
-                size_str = f"{file_size / 1024**2:.1f} MB"
-            elif file_size >= 1024:  # KB
-                size_str = f"{file_size / 1024:.1f} KB"
-            else:
-                size_str = f"{file_size} B"
-        else:
-            size_str = "Неизвестно"
+        status = video.get('status', 'unknown')
+        # Status text with icon using translation
+        status_icons = {
+            'ready': '✅',
+            'downloading': '📥',
+            'pending': '⏳',
+            'failed': '❌',
+            'deleted': '🗑️'
+        }
+        status_texts = {
+            'ready': _('status_ready'),
+            'downloading': _('status_downloading'),
+            'pending': _('status_pending'),
+            'failed': _('status_failed'),
+            'deleted': _('status_deleted')
+        }
+        
+        status_badge_classes = {
+            'ready': 'bg-success',
+            'downloading': 'bg-info',
+            'pending': 'bg-warning text-dark',
+            'failed': 'bg-danger',
+            'deleted': 'bg-secondary'
+        }
         
         formatted_videos.append({
             'hash': video['hash'],
             'short_hash': video['hash'][:12] + '...',
-            'title': video.get('title', 'Без названия'),
-            'uploader': video.get('uploader', 'Неизвестно'),
+            'title': video.get('title', 'Untitled'),
+            'uploader': video.get('uploader', 'Unknown'),
             'duration': video.get('duration'),
             'duration_str': format_duration(video.get('duration')),
-            'file_size': size_str,
-            'status': video.get('status', 'unknown'),
-            'status_text': get_status_text(video.get('status')),
+            'file_size': format_file_size(video.get('file_size')),
+            'status': status,
+            'status_text': f"{status_icons.get(status, '❓')} {status_texts.get(status, _('status_unknown'))}",
+            'status_badge_class': status_badge_classes.get(status, 'bg-dark'),
             'last_accessed': video.get('last_accessed'),
             'access_count': video.get('access_count', 0),
             'created_at': video.get('created_at'),
-            'source_url': video.get('source_url', ''),
+            'source_url': video.get('source_url', '#'),
         })
     
     return templates.TemplateResponse("videos.html", {
-        "request": request,
+        **context,
         "videos": formatted_videos,
         "page": page,
         "total_pages": total_pages,
         "search": search,
-        "status": status,
+        "status_filter": status_filter,
         "total_videos": total_videos,
         "has_prev": page > 1,
         "has_next": page < total_pages,
-        "prev_page": page - 1 if page > 1 else 1,
-        "next_page": page + 1 if page < total_pages else total_pages,
+        "prev_page": page - 1,
+        "next_page": page + 1,
     })
+
 
 @router.get("/video/{video_hash}", response_class=HTMLResponse)
 async def video_detail(request: Request, video_hash: str):
+    """Video detail page with player and metadata"""
     video = await db.get_video(video_hash)
+    context = get_base_context(request)
+    _ = context['_']
     
     if not video:
         return templates.TemplateResponse("error.html", {
-            "request": request,
-            "error": "Видео не найдено"
+            **context,
+            "error": _('error_404')
         })
     
-    # Получаем только готовые видео
+    # Get ready videos for navigation
     ready_videos = await db.get_all_ready_videos()
+    ready_videos.sort(key=lambda v: v.get('created_at', ''), reverse=False)
     
-    # Сортируем по дате добавления
-    sorted_videos = sorted(
-        ready_videos,
-        key=lambda v: v.get('created_at', ''),
-        reverse=False
-    )
-    
-    # Находим текущее видео
+    # Find current video index
     current_index = None
-    for i, v in enumerate(sorted_videos):
+    for i, v in enumerate(ready_videos):
         if v['hash'] == video_hash:
             current_index = i
             break
     
-    # Соседние видео
+    # Get neighbors
     prev_video = None
     next_video = None
     
     if current_index is not None:
         if current_index - 1 >= 0:
-            prev_video = sorted_videos[current_index - 1]
-        if current_index + 1 < len(sorted_videos):
-            next_video = sorted_videos[current_index + 1]
+            prev_video = ready_videos[current_index - 1]
+        if current_index + 1 < len(ready_videos):
+            next_video = ready_videos[current_index + 1]
     
-    # Случайные рекомендации
-    import random
+    # Get random recommendations
     random_videos = []
     other_ready = [v for v in ready_videos if v['hash'] != video_hash]
     if other_ready:
         random_videos = random.sample(other_ready, min(5, len(other_ready)))
     
-    # Форматируем видео (как было в оригинале)
-    file_size = video.get('file_size')
-    if file_size:
-        if file_size >= 1024**3:
-            size_str = f"{file_size / 1024**3:.2f} GB"
-        elif file_size >= 1024**2:
-            size_str = f"{file_size / 1024**2:.2f} MB"
-        else:
-            size_str = f"{file_size / 1024:.2f} KB"
-    else:
-        size_str = "Неизвестно"
+    # Status text
+    status = video.get('status', 'unknown')
+    status_icons = {
+        'ready': '✅',
+        'downloading': '📥',
+        'pending': '⏳',
+        'failed': '❌',
+        'deleted': '🗑️'
+    }
+    status_texts = {
+        'ready': _('status_ready'),
+        'downloading': _('status_downloading'),
+        'pending': _('status_pending'),
+        'failed': _('status_failed'),
+        'deleted': _('status_deleted')
+    }
+    status_badge_classes = {
+        'ready': 'bg-success',
+        'downloading': 'bg-info',
+        'pending': 'bg-warning text-dark',
+        'failed': 'bg-danger',
+        'deleted': 'bg-secondary'
+    }
     
+    # Format current video
     formatted_video = {
         'hash': video_hash,
         'short_hash': video_hash[:12] + '...',
-        'title': video.get('title', 'Без названия'),
-        'uploader': video.get('uploader', 'Неизвестно'),
+        'title': video.get('title', 'Untitled'),
+        'uploader': video.get('uploader', 'Unknown'),
         'duration': video.get('duration'),
         'duration_str': format_duration(video.get('duration')),
-        'file_size': size_str,
-        'status': video.get('status'),
-        'status_text': get_status_text(video.get('status')),
+        'file_size': format_file_size(video.get('file_size')),
+        'status': status,
+        'status_text': f"{status_icons.get(status, '❓')} {status_texts.get(status, _('status_unknown'))}",
+        'status_badge_class': status_badge_classes.get(status, 'bg-dark'),
         'last_accessed': video.get('last_accessed'),
         'access_count': video.get('access_count', 0),
         'created_at': video.get('created_at'),
@@ -251,6 +345,7 @@ async def video_detail(request: Request, video_hash: str):
         'file_ext': video.get('file_ext', 'mp4'),
     }
     
+    # MIME types for video
     mime_types = {
         'mp4': 'video/mp4',
         'webm': 'video/webm',
@@ -262,88 +357,64 @@ async def video_detail(request: Request, video_hash: str):
         'video/mp4'
     )
     
-    # Форматируем соседние видео
+    # Format neighbor function
     def format_neighbor(v):
         if not v:
             return None
         return {
             'hash': v['hash'],
-            'title': v.get('title', 'Без названия'),
-            'uploader': v.get('uploader', 'Неизвестно'),
+            'title': v.get('title', 'Untitled'),
+            'uploader': v.get('uploader', 'Unknown'),
             'duration_str': format_duration(v.get('duration')),
         }
     
     return templates.TemplateResponse("video.html", {
-        "request": request,
+        **context,
         "video": formatted_video,
         "prev_video": format_neighbor(prev_video),
         "next_video": format_neighbor(next_video),
         "random_videos": [format_neighbor(v) for v in random_videos],
     })
 
+
 @router.get("/queue", response_class=HTMLResponse)
 async def queue_status(request: Request):
-    """Страница очереди"""
+    """Queue status page"""
+    context = get_base_context(request)
+    
     try:
         queue_info = await queue.get_queue_info()
         
-        # Форматируем время
+        # Format timestamps
         if queue_info:
             for task in queue_info.get('queue', []):
                 task['added_time'] = timestamp_to_time(task.get('added_at'))
+                task['worker_name'] = None
             
             for task in queue_info.get('active_tasks_list', []):
                 task['started_time'] = timestamp_to_time(task.get('started_at'))
-                task['worker_name'] = f"Воркер {task.get('worker_id', '?')}"
+                task['worker_name'] = f"Worker {task.get('worker_id', '?')}"
         
         logger.debug(f"Queue: {queue_info.get('active_tasks', 0)} active, "
-                    f"{queue_info.get('queued_tasks', 0)} queued, "
-                    f"{queue_info.get('working_workers', 0)}/{queue_info.get('total_workers', 0)} workers")
+                    f"{queue_info.get('queued_tasks', 0)} queued")
         
     except Exception as e:
         logger.error(f"Error getting queue info: {e}")
         queue_info = {}
     
     return templates.TemplateResponse("queue.html", {
-        "request": request,
+        **context,
         "queue_info": queue_info
     })
 
+
 @router.get("/storage", response_class=HTMLResponse)
 async def storage_info(request: Request):
-    """
-    Информация о хранилище
-    """
-    from app.storage import storage
-    storage_info = await storage.get_storage_info() if hasattr(storage, 'get_storage_info') else {}
+    """Storage information page"""
+    storage_info_data = await storage.get_storage_info()
+    context = get_base_context(request)
     
     return templates.TemplateResponse("storage.html", {
-        "request": request,
-        "storage_info": storage_info
+        **context,
+        "storage_info": storage_info_data
     })
-
-# Вспомогательные функции
-def format_duration(seconds: Optional[float]) -> str:
-    """Форматирует длительность в читаемый вид"""
-    if not seconds:
-        return "Неизвестно"
-    
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    
-    if hours > 0:
-        return f"{hours}:{minutes:02d}:{secs:02d}"
-    else:
-        return f"{minutes}:{secs:02d}"
-
-def get_status_text(status: Optional[str]) -> str:
-    """Возвращает человеко-читаемый текст статуса"""
-    status_map = {
-        'pending': '⏳ В очереди',
-        'downloading': '📥 Загружается',
-        'ready': '✅ Готово',
-        'failed': '❌ Ошибка',
-        'deleted': '🗑️ Удалено',
-    }
-    return status_map.get(status, '❓ Неизвестно')

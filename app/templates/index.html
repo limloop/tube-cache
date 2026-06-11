@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Главная - Video Server{% endblock %}
+{% block title %}{{ _('nav_home') }} - Video Server{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -8,29 +8,29 @@
         <div class="card shadow">
             <div class="card-header bg-primary text-white">
                 <h4 class="mb-0">
-                    <i class="bi bi-cloud-download"></i> Загрузить видео
+                    <i class="bi bi-cloud-download"></i> {{ _('btn_download') }}
                 </h4>
             </div>
             <div class="card-body">
                 <form action="/download" method="post">
                     <div class="mb-3">
-                        <label for="url" class="form-label">Ссылка на видео</label>
+                        <label for="url" class="form-label">{{ _('form_url_label') }}</label>
                         <div class="input-group">
                             <span class="input-group-text">
                                 <i class="bi bi-link"></i>
                             </span>
                             <input type="url" class="form-control" id="url" name="url" 
-                                   placeholder="https://youtube.com/watch?v=..." 
+                                   placeholder="{{ _('form_url_placeholder') }}" 
                                    required>
                         </div>
                         <div class="form-text">
-                            Поддерживаемые источники: YouTube, Vimeo и другие
+                            {{ _('form_url_help') }}
                         </div>
                     </div>
                     
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="bi bi-download"></i> Загрузить видео
+                            <i class="bi bi-download"></i> {{ _('form_submit') }}
                         </button>
                     </div>
                 </form>
@@ -39,10 +39,10 @@
                 
                 <div class="text-center">
                     <a href="/videos" class="btn btn-outline-secondary me-2">
-                        <i class="bi bi-collection-play"></i> Просмотреть все видео
+                        <i class="bi bi-collection-play"></i> {{ _('btn_view_all') }}
                     </a>
                     <a href="/queue" class="btn btn-outline-info">
-                        <i class="bi bi-clock-history"></i> Статус очереди
+                        <i class="bi bi-clock-history"></i> {{ _('btn_check_queue') }}
                     </a>
                 </div>
             </div>
@@ -52,7 +52,7 @@
         <div class="card mt-4 shadow">
             <div class="card-header bg-info text-white">
                 <h5 class="mb-0">
-                    <i class="bi bi-hourglass-split"></i> Активные загрузки
+                    <i class="bi bi-hourglass-split"></i> {{ _('queue_active_tasks') }}
                 </h5>
             </div>
             <div class="card-body">
@@ -60,7 +60,7 @@
                     {% for task in active_tasks %}
                     <div class="list-group-item">
                         <div class="d-flex w-100 justify-content-between">
-                            <small class="text-muted">#{{ loop.index }}</small>
+                            <small class="text-muted">#{{ task.position }}</small>
                             <small class="text-muted">{{ task.url }}</small>
                         </div>
                         <div class="mt-2">

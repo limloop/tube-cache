@@ -1,0 +1,174 @@
+# ============================================
+# Korean Translations for Video Server
+# ============================================
+
+# Navigation
+nav_home=홈
+nav_videos=모든 비디오
+nav_queue=대기열
+nav_storage=저장소
+tagline=오프라인 비디오 서버
+
+# Common
+loading=로딩 중...
+error=오류
+success=성공
+cancel=취소
+save=저장
+delete=삭제
+close=닫기
+back=뒤로
+search=검색
+filter=필터
+status=상태
+actions=작업
+unknown=알 수 없음
+none=없음
+yes=예
+no=아니오
+confirm=확인
+warning=경고
+info=정보
+details=세부정보
+
+# Video status
+status_ready=준비됨
+status_pending=대기 중
+status_downloading=다운로드 중
+status_failed=실패
+status_deleted=삭제됨
+status_unknown=알 수 없음
+
+# Buttons
+btn_download=비디오 다운로드
+btn_add_video=비디오 추가
+btn_view_all=모든 비디오 보기
+btn_check_queue=대기열 확인
+btn_cleanup=오래된 비디오 정리
+btn_retry=재시도
+btn_watch=시청
+btn_stream=스트리밍
+btn_info=정보
+btn_refresh=새로고침
+btn_settings=설정
+btn_continue=계속
+
+# Messages
+msg_video_added=비디오가 다운로드 대기열에 추가되었습니다
+msg_video_ready=비디오 시청 준비 완료
+msg_no_videos=비디오를 찾을 수 없습니다
+msg_no_results=검색 결과가 없습니다
+msg_enter_url=유효한 비디오 URL을 입력하세요
+msg_upload_first=첫 번째 비디오를 업로드하세요!
+msg_processing=처리 중...
+msg_please_wait=잠시만 기다려주세요...
+
+# Queue page
+queue_title=다운로드 시스템
+queue_subtitle=다운로드 대기열 관리 및 모니터링
+queue_system_active=시스템 활성화
+queue_system_stopped=시스템 중지됨
+queue_info_unavailable=대기열 정보를 일시적으로 사용할 수 없습니다
+queue_active_tasks=활성 작업
+queue_queued_tasks=대기 중인 작업
+queue_workers=워커
+queue_completed=완료됨
+queue_failed=실패
+queue_retries=재시도 횟수
+queue_no_active=활성 작업 없음
+queue_empty=대기열이 비어 있음
+queue_workers_free=모든 워커가 사용 가능함
+queue_workers_distribution=워커 분포
+queue_free_slots=사용 가능
+queue_of=/ 
+queue_total_workers=전체 워커 수
+queue_running=실행 중
+queue_max_concurrent=최대 동시 실행 수
+queue_hash=해시
+queue_url=URL
+queue_worker=워커
+queue_started_at=시작 시간
+queue_duration=지속 시간
+queue_seconds=초
+queue_added_at=추가 시간
+queue_showing_first=처음 20개 표시 중 (전체
+queue_tasks=개)
+queue_no_tasks=처리 대기 중인 작업 없음
+queue_worker_name=워커
+
+# Storage page
+storage_title=저장소
+storage_usage=저장소 사용량
+storage_settings=설정
+storage_used=사용 중
+storage_free=사용 가능
+storage_max_size=최대 크기
+storage_video_count=비디오 수
+storage_status_good=좋음
+storage_status_warning=경고
+storage_status_critical=심각
+storage_recommendations=권장 사항
+storage_cleanup_triggered=정리 실행됨
+storage_cleanup_confirm=계속하시겠습니까? 오래된 비디오가 삭제됩니다.
+storage_recommendation_good=저장소 상태가 양호합니다. 정리가 필요하지 않습니다.
+storage_recommendation_warning=오래된 비디오 정리를 고려하세요. 새 다운로드 시 자동 정리가 실행됩니다.
+storage_recommendation_critical=즉시 정리하세요! 새 다운로드가 실패할 수 있습니다.
+storage_info_unavailable=저장소 정보를 사용할 수 없음
+storage_info_error=저장소 정보를 가져올 수 없음
+
+# Video page
+video_title=제목
+video_info=정보
+video_author=작성자
+video_duration=길이
+video_size=크기
+video_format=형식
+video_views=조회수
+video_added=추가됨
+video_last_viewed=마지막 시청
+video_original_link=원본 링크
+video_player_placeholder=재생 모드 선택
+video_play_video=비디오 모드
+video_play_audio=오디오만
+video_navigation=탐색
+video_previous=이전
+video_next=다음
+video_random_suggestion=추천 비디오
+from_media_library=미디어 라이브러리에서
+
+# Player controls
+player_speed=재생 속도
+player_audio_mode=오디오만
+player_video_mode=비디오 모드
+player_fullscreen=전체 화면
+player_mute=음소거
+player_volume=볼륨
+
+# Forms
+form_url_label=비디오 URL
+form_url_placeholder=https://youtube.com/watch?v=...
+form_url_help=지원되는 소스: YouTube, Vimeo 등
+form_submit=비디오 다운로드
+
+# Errors
+error_404=비디오를 찾을 수 없음
+error_invalid_url=잘못된 URL입니다. 유효한 비디오 링크를 입력하세요.
+error_server=서버 내부 오류
+error_file_missing=비디오 파일이 없음
+error_file_corrupted=비디오 파일이 손상됨
+error_access_denied=접근 거부됨
+error_timeout=요청 시간 초과
+
+# Time
+time_just_now=방금 전
+time_minute_ago=1분 전
+time_minutes_ago={count}분 전
+time_hour_ago=1시간 전
+time_hours_ago={count}시간 전
+time_day_ago=1일 전
+time_days_ago={count}일 전
+
+# Footer
+footer_github=GitHub
+footer_report_issue=문제 신고
+footer_documentation=문서

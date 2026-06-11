@@ -1,0 +1,174 @@
+# ============================================
+# German Translations for Video Server
+# ============================================
+
+# Navigation
+nav_home=Startseite
+nav_videos=Alle Videos
+nav_queue=Warteschlange
+nav_storage=Speicher
+tagline=Offline Video-Server
+
+# Common
+loading=Laden...
+error=Fehler
+success=Erfolg
+cancel=Abbrechen
+save=Speichern
+delete=Löschen
+close=Schließen
+back=Zurück
+search=Suchen
+filter=Filtern
+status=Status
+actions=Aktionen
+unknown=Unbekannt
+none=Keine
+yes=Ja
+no=Nein
+confirm=Bestätigen
+warning=Warnung
+info=Info
+details=Details
+
+# Video status
+status_ready=Bereit
+status_pending=In Warteschlange
+status_downloading=Wird heruntergeladen
+status_failed=Fehlgeschlagen
+status_deleted=Gelöscht
+status_unknown=Unbekannt
+
+# Buttons
+btn_download=Video herunterladen
+btn_add_video=Video hinzufügen
+btn_view_all=Alle Videos anzeigen
+btn_check_queue=Warteschlange prüfen
+btn_cleanup=Alte Videos löschen
+btn_retry=Wiederholen
+btn_watch=Ansehen
+btn_stream=Streamen
+btn_info=Info
+btn_refresh=Aktualisieren
+btn_settings=Einstellungen
+btn_continue=Fortsetzen
+
+# Messages
+msg_video_added=Video zur Download-Warteschlange hinzugefügt
+msg_video_ready=Video ist bereit zum Ansehen
+msg_no_videos=Keine Videos gefunden
+msg_no_results=Keine Ergebnisse für Ihre Suche gefunden
+msg_enter_url=Bitte geben Sie eine gültige Video-URL ein
+msg_upload_first=Laden Sie Ihr erstes Video hoch!
+msg_processing=Verarbeitung...
+msg_please_wait=Bitte warten...
+
+# Queue page
+queue_title=Download-System
+queue_subtitle=Download-Warteschlangenverwaltung und -überwachung
+queue_system_active=System aktiv
+queue_system_stopped=System gestoppt
+queue_info_unavailable=Warteschlangeninformationen vorübergehend nicht verfügbar
+queue_active_tasks=Aktive Aufgaben
+queue_queued_tasks=Aufgaben in Warteschlange
+queue_workers=Worker
+queue_completed=Abgeschlossen
+queue_failed=Fehlgeschlagen
+queue_retries=Wiederholungen
+queue_no_active=Keine aktiven Aufgaben
+queue_empty=Warteschlange ist leer
+queue_workers_free=Alle Worker sind frei
+queue_workers_distribution=Worker-Verteilung
+queue_free_slots=Frei
+queue_of=von
+queue_total_workers=Worker insgesamt
+queue_running=Läuft
+queue_max_concurrent=Max. gleichzeitig
+queue_hash=Hash
+queue_url=URL
+queue_worker=Worker
+queue_started_at=Gestartet
+queue_duration=Dauer
+queue_seconds=Sek
+queue_added_at=Hinzugefügt
+queue_showing_first=Zeige erste 20 von
+queue_tasks=Aufgaben
+queue_no_tasks=Keine Aufgaben warten auf Verarbeitung
+queue_worker_name=Worker
+
+# Storage page
+storage_title=Speicher
+storage_usage=Speichernutzung
+storage_settings=Einstellungen
+storage_used=Verwendet
+storage_free=Frei
+storage_max_size=Max. Größe
+storage_video_count=Videoanzahl
+storage_status_gut=Gut
+storage_status_warnung=Warnung
+storage_status_kritisch=Kritisch
+storage_recommendations=Empfehlungen
+storage_cleanup_triggered=Bereinigung gestartet
+storage_cleanup_confirm=Sind Sie sicher? Dies löscht alte Videos.
+storage_recommendation_good=Der Speicher ist gesund. Keine Bereinigung erforderlich.
+storage_recommendation_warning=Erwägen Sie, alte Videos zu löschen. Die automatische Bereinigung wird bei neuen Downloads ausgeführt.
+storage_recommendation_critical=Bereinigen Sie sofort! Neue Downloads könnten fehlschlagen.
+storage_info_unavailable=Speicherinformationen nicht verfügbar
+storage_info_error=Speicherinformationen konnten nicht abgerufen werden
+
+# Video page
+video_title=Titel
+video_info=Informationen
+video_author=Autor
+video_duration=Dauer
+video_size=Größe
+video_format=Format
+video_views=Aufrufe
+video_added=Hinzugefügt
+video_last_viewed=Zuletzt angesehen
+video_original_link=Ursprünglicher Link
+video_player_placeholder=Wiedergabemodus wählen
+video_play_video=Video
+video_play_audio=Audio
+video_navigation=Navigation
+video_previous=Vorheriges
+video_next=Nächstes
+video_random_suggestion=Zufällige Vorschläge
+from_media_library=Aus der Mediathek
+
+# Player controls
+player_speed=Wiedergabegeschwindigkeit
+player_audio_mode=Nur Audio
+player_video_mode=Videomodus
+player_fullscreen=Vollbild
+player_mute=Stumm
+player_volume=Lautstärke
+
+# Forms
+form_url_label=Video-URL
+form_url_placeholder=https://youtube.com/watch?v=...
+form_url_help=Unterstützte Quellen: YouTube, Vimeo und andere
+form_submit=Video herunterladen
+
+# Errors
+error_404=Video nicht gefunden
+error_invalid_url=Ungültige URL. Bitte geben Sie einen gültigen Videolink ein.
+error_server=Interner Serverfehler
+error_file_missing=Video-Datei fehlt
+error_file_corrupted=Video-Datei ist beschädigt
+error_access_denied=Zugriff verweigert
+error_timeout=Zeitüberschreitung der Anfrage
+
+# Time
+time_just_now=Gerade jetzt
+time_minute_ago=Vor 1 Minute
+time_minutes_ago=Vor {count} Minuten
+time_hour_ago=Vor 1 Stunde
+time_hours_ago=Vor {count} Stunden
+time_day_ago=Vor 1 Tag
+time_days_ago=Vor {count} Tagen
+
+# Footer
+footer_github=GitHub
+footer_report_issue=Problem melden
+footer_documentation=Dokumentation

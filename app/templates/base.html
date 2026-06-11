@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru" data-theme="light">
+<html lang="{{ current_lang }}" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -64,6 +64,18 @@
         .progress {
             height: 8px;
         }
+        /* Language dropdown styling */
+        .lang-dropdown .dropdown-item.active {
+            background-color: #0d6efd;
+            color: white;
+        }
+        .lang-flag {
+            margin-right: 0.5rem;
+            font-size: 1.1em;
+        }
+        .lang-switch {
+            cursor: pointer;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -80,31 +92,80 @@
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
                         <a class="nav-link" href="/">
-                            <i class="bi bi-house-door"></i> Главная
+                            <i class="bi bi-house-door"></i> {{ _('nav_home') }}
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/videos">
-                            <i class="bi bi-collection-play"></i> Все видео
+                            <i class="bi bi-collection-play"></i> {{ _('nav_videos') }}
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/queue">
-                            <i class="bi bi-clock-history"></i> Очередь
+                            <i class="bi bi-clock-history"></i> {{ _('nav_queue') }}
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/storage">
-                            <i class="bi bi-hdd"></i> Хранилище
+                            <i class="bi bi-hdd"></i> {{ _('nav_storage') }}
                         </a>
                     </li>
                 </ul>
                 <div class="d-flex align-items-center gap-2">
+                    <!-- Language switcher -->
+                    {% if languages|length > 1 %}
+                    <div class="dropdown lang-dropdown">
+                        <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-globe2"></i> 
+                            {% if current_lang == 'en' %}🇬🇧 EN
+                            {% elif current_lang == 'ru' %}🇷🇺 RU
+                            {% elif current_lang == 'uk' %}🇺🇦 UA
+                            {% elif current_lang == 'be' %}🇧🇾 BY
+                            {% elif current_lang == 'es' %}🇪🇸 ES
+                            {% elif current_lang == 'fr' %}🇫🇷 FR
+                            {% elif current_lang == 'de' %}🇩🇪 DE
+                            {% elif current_lang == 'it' %}🇮🇹 IT
+                            {% elif current_lang == 'pt' %}🇵🇹 PT
+                            {% elif current_lang == 'zh' %}🇨🇳 中文
+                            {% elif current_lang == 'ja' %}🇯🇵 日本語
+                            {% elif current_lang == 'ko' %}🇰🇷 한국어
+                            {% else %}{{ current_lang|upper }}{% endif %}
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            {% for lang in languages %}
+                            <li>
+                                <a class="dropdown-item lang-switch {% if lang.is_current %}active{% endif %}" 
+                                   href="#" data-lang="{{ lang.code }}">
+                                    <span class="lang-flag">
+                                        {% if lang.code == 'en' %}🇬🇧
+                                        {% elif lang.code == 'ru' %}🇷🇺
+                                        {% elif lang.code == 'uk' %}🇺🇦
+                                        {% elif lang.code == 'be' %}🇧🇾
+                                        {% elif lang.code == 'es' %}🇪🇸
+                                        {% elif lang.code == 'fr' %}🇫🇷
+                                        {% elif lang.code == 'de' %}🇩🇪
+                                        {% elif lang.code == 'it' %}🇮🇹
+                                        {% elif lang.code == 'pt' %}🇵🇹
+                                        {% elif lang.code == 'zh' %}🇨🇳
+                                        {% elif lang.code == 'ja' %}🇯🇵
+                                        {% elif lang.code == 'ko' %}🇰🇷
+                                        {% else %}🌐{% endif %}
+                                    </span>
+                                    {{ lang.name }}
+                                    {% if lang.is_current %}✓{% endif %}
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Theme Toggle Button -->
                     <button id="theme-toggle" class="theme-toggle" title="Toggle theme">
                         <i class="bi bi-moon-stars"></i>
                     </button>
                     <span class="navbar-text text-light">
-                        <i class="bi bi-download"></i> Автономный видеосервер
+                        <i class="bi bi-download"></i> {{ _('tagline') }}
                     </span>
                 </div>
             </div>
@@ -128,6 +189,14 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/static/js/theme.js"></script>
+    <script src="/static/js/language.js"></script>
+    <script>
+        // Debug: Log current language on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Page loaded, current lang from HTML:', document.documentElement.lang);
+            console.log('Language cookie:', document.cookie);
+        });
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

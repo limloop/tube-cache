@@ -1,0 +1,174 @@
+# ============================================
+# Japanese Translations for Video Server
+# ============================================
+
+# Navigation
+nav_home=ホーム
+nav_videos=すべての動画
+nav_queue=キュー
+nav_storage=ストレージ
+tagline=オフライン動画サーバー
+
+# Common
+loading=読み込み中...
+error=エラー
+success=成功
+cancel=キャンセル
+save=保存
+delete=削除
+close=閉じる
+back=戻る
+search=検索
+filter=フィルター
+status=ステータス
+actions=アクション
+unknown=不明
+none=なし
+yes=はい
+no=いいえ
+confirm=確認
+warning=警告
+info=情報
+details=詳細
+
+# Video status
+status_ready=準備完了
+status_pending=キュー待ち
+status_downloading=ダウンロード中
+status_failed=失敗
+status_deleted=削除済み
+status_unknown=不明
+
+# Buttons
+btn_download=動画をダウンロード
+btn_add_video=動画を追加
+btn_view_all=すべての動画を見る
+btn_check_queue=キューを確認
+btn_cleanup=古い動画を削除
+btn_retry=リトライ
+btn_watch=再生
+btn_stream=ストリーム
+btn_info=情報
+btn_refresh=更新
+btn_settings=設定
+btn_continue=続行
+
+# Messages
+msg_video_added=動画がダウンロードキューに追加されました
+msg_video_ready=動画の準備ができました
+msg_no_videos=動画が見つかりません
+msg_no_results=検索結果が見つかりません
+msg_enter_url=有効な動画URLを入力してください
+msg_upload_first=最初の動画をアップロードしてください！
+msg_processing=処理中...
+msg_please_wait=お待ちください...
+
+# Queue page
+queue_title=ダウンロードシステム
+queue_subtitle=ダウンロードキューの管理と監視
+queue_system_active=システムアクティブ
+queue_system_stopped=システム停止
+queue_info_unavailable=キュー情報は一時的に利用できません
+queue_active_tasks=アクティブなタスク
+queue_queued_tasks=キュー内のタスク
+queue_workers=ワーカー
+queue_completed=完了
+queue_failed=失敗
+queue_retries=リトライ回数
+queue_no_active=アクティブなタスクはありません
+queue_empty=キューは空です
+queue_workers_free=すべてのワーカーが空いています
+queue_workers_distribution=ワーカー分布
+queue_free_slots=空き
+queue_of=/
+queue_total_workers=総ワーカー数
+queue_running=実行中
+queue_max_concurrent=最大同時実行数
+queue_hash=ハッシュ
+queue_url=URL
+queue_worker=ワーカー
+queue_started_at=開始時刻
+queue_duration= duration
+queue_seconds=秒
+queue_added_at=追加時刻
+queue_showing_first=最初の20件を表示中（全
+queue_tasks=件）
+queue_no_tasks=処理待ちのタスクはありません
+queue_worker_name=ワーカー
+
+# Storage page
+storage_title=ストレージ
+storage_usage=ストレージ使用量
+storage_settings=設定
+storage_used=使用中
+storage_free=空き
+storage_max_size=最大サイズ
+storage_video_count=動画数
+storage_status_good=良好
+storage_status_warning=警告
+storage_status_critical=危機的
+storage_recommendations=推奨事項
+storage_cleanup_triggered=クリーンアップ実行
+storage_cleanup_confirm=よろしいですか？古い動画が削除されます。
+storage_recommendation_good=ストレージは健全です。クリーンアップは不要です。
+storage_recommendation_warning=古い動画の削除を検討してください。新しいダウンロード時に自動クリーンアップが実行されます。
+storage_recommendation_critical=すぐにクリーンアップしてください！新しいダウンロードが失敗する可能性があります。
+storage_info_unavailable=ストレージ情報を利用できません
+storage_info_error=ストレージ情報を取得できませんでした
+
+# Video page
+video_title=タイトル
+video_info=情報
+video_author=作者
+video_duration=長さ
+video_size=サイズ
+video_format=フォーマット
+video_views=再生回数
+video_added=追加日
+video_last_viewed=最終視聴日
+video_original_link=元のリンク
+video_player_placeholder=再生モードを選択
+video_play_video=動画
+video_play_audio=音声のみ
+video_navigation=ナビゲーション
+video_previous=前へ
+video_next=次へ
+video_random_suggestion=おすすめ
+from_media_library=メディアライブラリから
+
+# Player controls
+player_speed=再生速度
+player_audio_mode=音声のみ
+player_video_mode=動画モード
+player_fullscreen=全画面
+player_mute=ミュート
+player_volume=音量
+
+# Forms
+form_url_label=動画URL
+form_url_placeholder=https://youtube.com/watch?v=...
+form_url_help=対応ソース：YouTube、Vimeoなど
+form_submit=動画をダウンロード
+
+# Errors
+error_404=動画が見つかりません
+error_invalid_url=無効なURLです。有効な動画リンクを入力してください。
+error_server=サーバー内部エラー
+error_file_missing=動画ファイルが見つかりません
+error_file_corrupted=動画ファイルが破損しています
+error_access_denied=アクセスが拒否されました
+error_timeout=リクエストタイムアウト
+
+# Time
+time_just_now=たった今
+time_minute_ago=1分前
+time_minutes_ago={count}分前
+time_hour_ago=1時間前
+time_hours_ago={count}時間前
+time_day_ago=1日前
+time_days_ago={count}日前
+
+# Footer
+footer_github=GitHub
+footer_report_issue=問題を報告
+footer_documentation=ドキュメント

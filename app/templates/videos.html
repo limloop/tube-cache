@@ -1,22 +1,22 @@
 {% extends "base.html" %}
 
-{% block title %}Все видео - Video Server{% endblock %}
+{% block title %}{{ _('nav_videos') }} - Video Server{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>
-        <i class="bi bi-collection-play"></i> Все видео
+        <i class="bi bi-collection-play"></i> {{ _('nav_videos') }}
         <span class="badge bg-secondary">{{ total_videos }}</span>
     </h1>
     
     <div>
         <a href="/" class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> Добавить видео
+            <i class="bi bi-plus-circle"></i> {{ _('btn_add_video') }}
         </a>
     </div>
 </div>
 
-<!-- Поиск и фильтры -->
+<!-- Search and filters -->
 <div class="card mb-4 shadow">
     <div class="card-body">
         <form method="get" class="row g-3">
@@ -26,35 +26,35 @@
                         <i class="bi bi-search"></i>
                     </span>
                     <input type="text" class="form-control" name="search" 
-                           placeholder="Поиск по названию или автору..." 
+                           placeholder="{{ _('search') }}..." 
                            value="{{ search }}">
                 </div>
             </div>
             <div class="col-md-4">
                 <select class="form-select" name="status">
-                    <option value="ready" {% if status == 'ready' %}selected{% endif %}>
-                        ✅ Только готовые
+                    <option value="ready" {% if status_filter == 'ready' %}selected{% endif %}>
+                        ✅ {{ _('status_ready') }}
                     </option>
-                    <option value="downloading" {% if status == 'downloading' %}selected{% endif %}>
-                        ✍️ Загрузка
+                    <option value="downloading" {% if status_filter == 'downloading' %}selected{% endif %}>
+                        📥 {{ _('status_downloading') }}
                     </option>
-                    <option value="pending" {% if status == 'pending' %}selected{% endif %}>
-                        ⏳ В очереди
+                    <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>
+                        ⏳ {{ _('status_pending') }}
                     </option>
-                    <option value="failed" {% if status == 'failed' %}selected{% endif %}>
-                        ❌ Ошибки
+                    <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>
+                        ❌ {{ _('status_failed') }}
                     </option>
-                    <option value="deleted" {% if status == 'deleted' %}selected{% endif %}>
-                        🗑️ Удаленые
+                    <option value="deleted" {% if status_filter == 'deleted' %}selected{% endif %}>
+                        🗑️ {{ _('status_deleted') }}
                     </option>
-                    <option value="all" {% if status == 'all' %}selected{% endif %}>
-                        📋 Все статусы
+                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>
+                        📋 {{ _('status_all')|default('All') }}
                     </option>
                 </select>
             </div>
             <div class="col-md-2">
                 <button type="submit" class="btn btn-outline-primary w-100">
-                    <i class="bi bi-funnel"></i> Фильтр
+                    <i class="bi bi-funnel"></i> {{ _('filter') }}
                 </button>
             </div>
         </form>
@@ -62,79 +62,67 @@
 </div>
 
 {% if videos %}
-<!-- Таблица видео -->
+<!-- Videos table -->
 <div class="card shadow">
     <div class="table-responsive">
         <table class="table table-hover mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>Название</th>
-                    <th>Автор</th>
-                    <th>Длительность</th>
-                    <th>Размер</th>
-                    <th>Статус</th>
-                    <th>Действия</th>
+                    <th>{{ _('video_title')|default('Title') }}</th>
+                    <th>{{ _('video_author') }}</th>
+                    <th>{{ _('video_duration') }}</th>
+                    <th>{{ _('video_size') }}</th>
+                    <th>{{ _('status') }}</th>
+                    <th>{{ _('actions') }}</th>
                 </tr>
             </thead>
             <tbody>
                 {% for video in videos %}
                 <tr>
                     <td>
-                        <strong>{{ video.title|truncate(40) if video.title else video.source_url }}</strong>
+                        <strong>{{ video.title|truncate(40) }}</strong>
                         <br>
                         <small class="text-muted">{{ video.short_hash }}</small>
-                        {% if not video.title %}
-                        <br>
-                        <small class="text-muted"><i>Нет названия</i></small>
-                        {% endif %}
                     </td>
                     <td>
-                        {{ video.uploader|truncate(20) if video.uploader else '<small class="text-muted"><i>Неизвестно</i></small>'|safe }}
+                        {{ video.uploader|truncate(20) }}
                     </td>
                     <td>
-                        {{ video.duration_str if video.duration_str else '<span class="text-muted">—</span>'|safe }}
+                        {{ video.duration_str }}
                     </td>
                     <td>
-                        {{ video.file_size if video.file_size else '<span class="text-muted">—</span>'|safe }}
+                        {{ video.file_size }}
                     </td>
                     <td>
-                        <span class="badge {% if video.status == 'ready' %}bg-success
-                                          {% elif video.status == 'downloading' %}bg-info
-                                          {% elif video.status == 'pending' %}bg-warning
-                                          {% elif video.status == 'failed' %}bg-danger
-                                          {% elif video.status == 'deleted' %}bg-secondary
-                                          {% else %}bg-dark{% endif %} status-badge">
+                        <span class="badge {{ video.status_badge_class }}">
                             {{ video.status_text }}
                         </span>
                     </td>
                     <td>
                         {% if video.status == 'ready' %}
-                        <a href="/video/{{ video.hash }}" class="btn btn-sm btn-success" title="Смотреть">
+                        <a href="/video/{{ video.hash }}" class="btn btn-sm btn-success" title="{{ _('btn_watch') }}">
                             <i class="bi bi-play-fill"></i>
                         </a>
-                        <a href="/stream/{{ video.hash }}" class="btn btn-sm btn-outline-primary" title="Стриминг" target="_blank">
+                        <a href="/stream/{{ video.hash }}" class="btn btn-sm btn-outline-primary" title="{{ _('btn_stream') }}" target="_blank">
                             <i class="bi bi-cast"></i>
                         </a>
                         {% endif %}
                         
-                        <!-- Кнопка информации (показываем всегда если есть хеш) -->
-                        <a href="/info/{{ video.hash }}" class="btn btn-sm btn-outline-info" title="Информация">
+                        <a href="/info/{{ video.hash }}" class="btn btn-sm btn-outline-info" title="{{ _('btn_info') }}">
                             <i class="bi bi-info-circle"></i>
                         </a>
                         
-                        <!-- Кнопка повторной загрузки для failed/deleted или если нет метаданных -->
-                        {% if video.status in ['failed', 'deleted'] or not video.title %}
+                        {% if video.status in ['failed', 'deleted'] %}
                         <form action="/download" method="post" style="display: inline;">
                             <input type="hidden" name="url" value="{{ video.source_url }}">
-                            <button type="submit" class="btn btn-sm btn-warning" title="Повторная загрузка">
+                            <button type="submit" class="btn btn-sm btn-warning" title="{{ _('btn_retry') }}">
                                 <i class="bi bi-arrow-clockwise"></i>
                             </button>
                         </form>
                         {% endif %}
                         
-                        <!-- Для pending/downloading можно показать статус в очереди -->
                         {% if video.status in ['pending', 'downloading'] %}
-                        <span class="badge bg-secondary" title="В процессе загрузки">
+                        <span class="badge bg-secondary" title="{{ _('status_downloading') }}">
                             <i class="bi bi-hourglass-split"></i>
                         </span>
                         {% endif %}
@@ -146,24 +134,22 @@
     </div>
 </div>
 
-<!-- Пагинация -->
+<!-- Pagination -->
 {% if total_pages > 1 %}
 <nav class="mt-4">
     <ul class="pagination justify-content-center">
-        <!-- Кнопка "Назад" -->
         <li class="page-item {% if not has_prev %}disabled{% endif %}">
-            <a class="page-link" href="?page={{ prev_page }}&search={{ search }}&status={{ status }}">
+            <a class="page-link" href="?page={{ prev_page }}&search={{ search }}&status={{ status_filter }}">
                 <i class="bi bi-chevron-left"></i>
             </a>
         </li>
         
-        {% set pages_to_show = 7 %} <!-- общее количество отображаемых страниц -->
-        {% set side_pages = 2 %} <!-- сколько страниц показывать слева и справа от текущей -->
+        {% set pages_to_show = 7 %}
+        {% set side_pages = 2 %}
         
         {% set start_page = page - side_pages %}
         {% set end_page = page + side_pages %}
         
-        <!-- Корректируем, если вышли за пределы -->
         {% if start_page < 2 %}
             {% set start_page = 1 %}
             {% set end_page = pages_to_show %}
@@ -178,40 +164,36 @@
             {% set start_page = 1 %}
         {% endif %}
         
-        <!-- Первая страница -->
         {% if start_page > 1 %}
         <li class="page-item">
-            <a class="page-link" href="?page=1&search={{ search }}&status={{ status }}">1</a>
+            <a class="page-link" href="?page=1&search={{ search }}&status={{ status_filter }}">1</a>
         </li>
         {% if start_page > 2 %}
         <li class="page-item disabled"><span class="page-link">...</span></li>
         {% endif %}
         {% endif %}
         
-        <!-- Центральные страницы -->
         {% for p in range(start_page, end_page + 1) %}
         <li class="page-item {% if p == page %}active{% endif %}">
-            <a class="page-link" href="?page={{ p }}&search={{ search }}&status={{ status }}">
+            <a class="page-link" href="?page={{ p }}&search={{ search }}&status={{ status_filter }}">
                 {{ p }}
             </a>
         </li>
         {% endfor %}
         
-        <!-- Последняя страница -->
         {% if end_page < total_pages %}
         {% if end_page < total_pages - 1 %}
         <li class="page-item disabled"><span class="page-link">...</span></li>
         {% endif %}
         <li class="page-item">
-            <a class="page-link" href="?page={{ total_pages }}&search={{ search }}&status={{ status }}">
+            <a class="page-link" href="?page={{ total_pages }}&search={{ search }}&status={{ status_filter }}">
                 {{ total_pages }}
             </a>
         </li>
         {% endif %}
         
-        <!-- Кнопка "Вперед" -->
         <li class="page-item {% if not has_next %}disabled{% endif %}">
-            <a class="page-link" href="?page={{ next_page }}&search={{ search }}&status={{ status }}">
+            <a class="page-link" href="?page={{ next_page }}&search={{ search }}&status={{ status_filter }}">
                 <i class="bi bi-chevron-right"></i>
             </a>
         </li>
@@ -220,21 +202,21 @@
 {% endif %}
 
 {% else %}
-<!-- Нет видео -->
+<!-- No videos -->
 <div class="text-center py-5">
     <div class="display-1 text-muted">
         <i class="bi bi-film"></i>
     </div>
-    <h3 class="mt-3">Видео не найдены</h3>
+    <h3 class="mt-3">{{ _('msg_no_videos') }}</h3>
     <p class="text-muted">
         {% if search %}
-        По запросу "{{ search }}" ничего не найдено
+        {{ _('msg_no_results') }}
         {% else %}
-        Еще нет загруженных видео. Добавьте первое видео!
+        {{ _('msg_upload_first') }}
         {% endif %}
     </p>
     <a href="/" class="btn btn-primary btn-lg mt-3">
-        <i class="bi bi-cloud-download"></i> Загрузить видео
+        <i class="bi bi-cloud-download"></i> {{ _('btn_download') }}
     </a>
 </div>
 {% endif %}

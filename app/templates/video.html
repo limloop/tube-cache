@@ -27,7 +27,7 @@
         {% if prev_video or next_video %}
         <div class="card shadow mb-4">
             <div class="card-header bg-secondary text-white">
-                <h5 class="mb-0"><i class="bi bi-arrow-left-right"></i> Навигация</h5>
+                <h5 class="mb-0"><i class="bi bi-arrow-left-right"></i> {{ _('video_navigation') }}</h5>
             </div>
             <div class="card-body">
                 <div class="row g-3">
@@ -38,7 +38,7 @@
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div>
                                         <i class="bi bi-arrow-left-circle-fill text-primary"></i>
-                                        <strong class="ms-1">Предыдущее</strong>
+                                        <strong class="ms-1">{{ _('video_previous') }}</strong>
                                     </div>
                                     <span class="badge bg-secondary">{{ prev_video.duration_str }}</span>
                                 </div>
@@ -49,9 +49,9 @@
                             </div>
                         </a>
                         {% else %}
-                        <div class="border rounded p-2 bg-light">
+                        <div class="border rounded p-2 bg-light opacity-50">
                             <i class="bi bi-arrow-left-circle text-muted"></i>
-                            <span class="ms-1 text-muted">Нет предыдущего</span>
+                            <span class="ms-1 text-muted">{{ _('video_previous') }}</span>
                         </div>
                         {% endif %}
                     </div>
@@ -63,7 +63,7 @@
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div>
                                         <i class="bi bi-arrow-right-circle-fill text-primary"></i>
-                                        <strong class="ms-1">Следующее</strong>
+                                        <strong class="ms-1">{{ _('video_next') }}</strong>
                                     </div>
                                     <span class="badge bg-secondary">{{ next_video.duration_str }}</span>
                                 </div>
@@ -74,9 +74,9 @@
                             </div>
                         </a>
                         {% else %}
-                        <div class="border rounded p-2 bg-light">
+                        <div class="border rounded p-2 bg-light opacity-50">
                             <i class="bi bi-arrow-right-circle text-muted"></i>
-                            <span class="ms-1 text-muted">Нет следующего</span>
+                            <span class="ms-1 text-muted">{{ _('video_next') }}</span>
                         </div>
                         {% endif %}
                     </div>
@@ -88,8 +88,8 @@
         {% if random_videos %}
         <div class="card shadow">
             <div class="card-header bg-info text-white">
-                <h5 class="mb-0"><i class="bi bi-shuffle"></i> Случайная подборка</h5>
-                <small class="text-white-50">Из имеющейся медиатеки</small>
+                <h5 class="mb-0"><i class="bi bi-shuffle"></i> {{ _('video_random_suggestion') }}</h5>
+                <small class="text-white-50">{{ _('from_media_library')|default('From media library') }}</small>
             </div>
             <div class="card-body">
                 <div class="row row-cols-2 row-cols-md-3 g-3">
@@ -117,46 +117,43 @@
     <div class="col-lg-4">
         <div class="card shadow">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Информация</h5>
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> {{ _('video_info') }}</h5>
             </div>
             <div class="card-body">
                 <h4 class="card-title">{{ video.title }}</h4>
                 
                 <dl class="row mt-3">
-                    <dt class="col-sm-4">Автор:</dt>
+                    <dt class="col-sm-4">{{ _('video_author') }}:</dt>
                     <dd class="col-sm-8">{{ video.uploader }}</dd>
                     
-                    <dt class="col-sm-4">Длительность:</dt>
+                    <dt class="col-sm-4">{{ _('video_duration') }}:</dt>
                     <dd class="col-sm-8">{{ video.duration_str }}</dd>
                     
-                    <dt class="col-sm-4">Размер:</dt>
+                    <dt class="col-sm-4">{{ _('video_size') }}:</dt>
                     <dd class="col-sm-8">{{ video.file_size }}</dd>
                     
-                    <dt class="col-sm-4">Формат:</dt>
+                    <dt class="col-sm-4">{{ _('video_format') }}:</dt>
                     <dd class="col-sm-8">{{ video.file_ext|upper }}</dd>
                     
-                    <dt class="col-sm-4">Статус:</dt>
+                    <dt class="col-sm-4">{{ _('status') }}:</dt>
                     <dd class="col-sm-8">
-                        <span class="badge {% if video.status == 'ready' %}bg-success
-                                          {% elif video.status == 'downloading' %}bg-info
-                                          {% elif video.status == 'pending' %}bg-warning
-                                          {% else %}bg-danger{% endif %}">
+                        <span class="badge {{ video.status_badge_class }}">
                             {{ video.status_text }}
                         </span>
                     </dd>
                     
-                    <dt class="col-sm-4">Просмотров:</dt>
+                    <dt class="col-sm-4">{{ _('video_views') }}:</dt>
                     <dd class="col-sm-8">{{ video.access_count }}</dd>
                     
-                    <dt class="col-sm-4">Добавлено:</dt>
-                    <dd class="col-sm-8">{{ video.created_at if video.created_at else 'Неизвестно' }}</dd>
+                    <dt class="col-sm-4">{{ _('video_added') }}:</dt>
+                    <dd class="col-sm-8">{{ video.created_at if video.created_at else '—' }}</dd>
                     
-                    <dt class="col-sm-4">Последний просмотр:</dt>
+                    <dt class="col-sm-4">{{ _('video_last_viewed') }}:</dt>
                     <dd class="col-sm-8">
                         {% if video.last_accessed %}
                             {{ video.last_accessed }}
                         {% else %}
-                            Никогда
+                            —
                         {% endif %}
                     </dd>
                 </dl>
@@ -165,13 +162,13 @@
                 
                 <div class="d-grid gap-2">
                     <a href="/stream/{{ video.hash }}" class="btn btn-primary" target="_blank">
-                        <i class="bi bi-play-fill"></i> Открыть в плеере
+                        <i class="bi bi-play-fill"></i> {{ _('btn_watch') }}
                     </a>
                     <a href="{{ video.source_url }}" class="btn btn-outline-secondary" target="_blank">
-                        <i class="bi bi-link-45deg"></i> Исходная ссылка
+                        <i class="bi bi-link-45deg"></i> {{ _('video_original_link') }}
                     </a>
                     <a href="/videos" class="btn btn-outline-info">
-                        <i class="bi bi-arrow-left"></i> Назад к списку
+                        <i class="bi bi-arrow-left"></i> {{ _('back') }}
                     </a>
                 </div>
             </div>

@@ -1,0 +1,174 @@
+# ============================================
+# Chinese Translations for Video Server
+# ============================================
+
+# Navigation
+nav_home=首页
+nav_videos=所有视频
+nav_queue=下载队列
+nav_storage=存储空间
+tagline=离线视频服务器
+
+# Common
+loading=加载中...
+error=错误
+success=成功
+cancel=取消
+save=保存
+delete=删除
+close=关闭
+back=返回
+search=搜索
+filter=筛选
+status=状态
+actions=操作
+unknown=未知
+none=无
+yes=是
+no=否
+confirm=确认
+warning=警告
+info=信息
+details=详情
+
+# Video status
+status_ready=就绪
+status_pending=排队中
+status_downloading=下载中
+status_failed=失败
+status_deleted=已删除
+status_unknown=未知
+
+# Buttons
+btn_download=下载视频
+btn_add_video=添加视频
+btn_view_all=查看所有视频
+btn_check_queue=查看队列
+btn_cleanup=清理旧视频
+btn_retry=重试
+btn_watch=观看
+btn_stream=流式播放
+btn_info=信息
+btn_refresh=刷新
+btn_settings=设置
+btn_continue=继续
+
+# Messages
+msg_video_added=视频已添加到下载队列
+msg_video_ready=视频已准备好观看
+msg_no_videos=未找到视频
+msg_no_results=未找到搜索结果
+msg_enter_url=请输入有效的视频URL
+msg_upload_first=上传您的第一个视频！
+msg_processing=处理中...
+msg_please_wait=请稍候...
+
+# Queue page
+queue_title=下载系统
+queue_subtitle=下载队列管理和监控
+queue_system_active=系统运行中
+queue_system_stopped=系统已停止
+queue_info_unavailable=队列信息暂时不可用
+queue_active_tasks=活动任务
+queue_queued_tasks=排队任务
+queue_workers=工作线程
+queue_completed=已完成
+queue_failed=失败
+queue_retries=重试次数
+queue_no_active=无活动任务
+queue_empty=队列为空
+queue_workers_free=所有工作线程空闲
+queue_workers_distribution=工作线程分布
+queue_free_slots=空闲
+queue_of=共
+queue_total_workers=总工作线程
+queue_running=运行中
+queue_max_concurrent=最大并发
+queue_hash=哈希
+queue_url=URL
+queue_worker=工作线程
+queue_started_at=开始时间
+queue_duration=持续时间
+queue_seconds=秒
+queue_added_at=添加时间
+queue_showing_first=显示前20个，共
+queue_tasks=个任务
+queue_no_tasks=没有等待处理的任务
+queue_worker_name=工作线程
+
+# Storage page
+storage_title=存储空间
+storage_usage=存储使用情况
+storage_settings=设置
+storage_used=已使用
+storage_free=可用
+storage_max_size=最大容量
+storage_video_count=视频数量
+storage_status_good=良好
+storage_status_warning=警告
+storage_status_critical=严重
+storage_recommendations=建议
+storage_cleanup_triggered=已触发清理
+storage_cleanup_confirm=确定吗？这将删除旧视频。
+storage_recommendation_good=存储状态良好，无需清理。
+storage_recommendation_warning=建议清理旧视频。新下载时会自动清理。
+storage_recommendation_critical=请立即清理！新下载可能失败。
+storage_info_unavailable=存储信息不可用
+storage_info_error=无法获取存储信息
+
+# Video page
+video_title=标题
+video_info=信息
+video_author=作者
+video_duration=时长
+video_size=大小
+video_format=格式
+video_views=观看次数
+video_added=添加时间
+video_last_viewed=最后观看
+video_original_link=原始链接
+video_player_placeholder=选择播放模式
+video_play_video=视频模式
+video_play_audio=音频模式
+video_navigation=导航
+video_previous=上一个
+video_next=下一个
+video_random_suggestion=随机推荐
+from_media_library=来自媒体库
+
+# Player controls
+player_speed=播放速度
+player_audio_mode=仅音频
+player_video_mode=视频模式
+player_fullscreen=全屏
+player_mute=静音
+player_volume=音量
+
+# Forms
+form_url_label=视频URL
+form_url_placeholder=https://youtube.com/watch?v=...
+form_url_help=支持的来源：YouTube、Vimeo等
+form_submit=下载视频
+
+# Errors
+error_404=未找到视频
+error_invalid_url=无效的URL，请输入有效的视频链接
+error_server=服务器内部错误
+error_file_missing=视频文件丢失
+error_file_corrupted=视频文件已损坏
+error_access_denied=访问被拒绝
+error_timeout=请求超时
+
+# Time
+time_just_now=刚刚
+time_minute_ago=1分钟前
+time_minutes_ago={count}分钟前
+time_hour_ago=1小时前
+time_hours_ago={count}小时前
+time_day_ago=1天前
+time_days_ago={count}天前
+
+# Footer
+footer_github=GitHub
+footer_report_issue=报告问题
+footer_documentation=文档

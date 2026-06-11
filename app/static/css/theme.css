@@ -598,3 +598,164 @@ body {
 [data-theme="dark"] .card:not(.bg-primary):not(.bg-success):not(.bg-danger):not(.bg-warning):not(.bg-info):hover .card-title {
     color: var(--text-primary);
 }
+
+/* Dropdown menu in dark mode */
+[data-theme="dark"] .dropdown-menu {
+    background-color: #2d2d2d;
+    border-color: #404040;
+}
+
+[data-theme="dark"] .dropdown-item {
+    color: #e4e6eb;
+}
+
+[data-theme="dark"] .dropdown-item:hover,
+[data-theme="dark"] .dropdown-item:focus {
+    background-color: #404040;
+    color: #ffffff;
+}
+
+[data-theme="dark"] .dropdown-item.active,
+[data-theme="dark"] .dropdown-item:active {
+    background-color: #0d6efd;
+    color: white;
+}
+
+[data-theme="dark"] .dropdown-divider {
+    border-top-color: #404040;
+}
+
+[data-theme="dark"] .dropdown-header {
+    color: #9ca3af;
+}
+
+/* Dropdown button in navbar */
+[data-theme="dark"] .btn-outline-light.dropdown-toggle {
+    color: #e4e6eb;
+    border-color: #404040;
+}
+
+[data-theme="dark"] .btn-outline-light.dropdown-toggle:hover,
+[data-theme="dark"] .btn-outline-light.dropdown-toggle:focus,
+[data-theme="dark"] .btn-outline-light.dropdown-toggle.show {
+    background-color: #404040;
+    color: #ffffff;
+    border-color: #555555;
+}
+
+/* Fix for dropdown toggle icon */
+[data-theme="dark"] .dropdown-toggle::after {
+    color: #e4e6eb;
+}
+
+/* Ensure dropdown menu appears above other content */
+.dropdown-menu {
+    z-index: 1050;
+}
+
+/* Fix for Bootstrap's default dark mode overrides */
+[data-theme="dark"] .dropdown-menu-dark {
+    background-color: #2d2d2d;
+    border-color: #404040;
+}
+
+/* Light theme dropdown (default) */
+.dropdown-menu {
+    background-color: #ffffff;
+    border-color: #dee2e6;
+}
+
+.dropdown-item {
+    color: #212529;
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background-color: #e9ecef;
+    color: #1a1e21;
+}
+
+.dropdown-item.active,
+.dropdown-item:active {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.dropdown-divider {
+    border-top-color: #dee2e6;
+}
+
+.dropdown-header {
+    color: #6c757d;
+}
+
+/* Dropdown button in navbar - light theme */
+.btn-outline-light.dropdown-toggle {
+    color: #f8f9fa;
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-outline-light.dropdown-toggle:hover,
+.btn-outline-light.dropdown-toggle:focus,
+.btn-outline-light.dropdown-toggle.show {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.75);
+}
+
+/* Dark theme dropdown overrides */
+[data-theme="dark"] .dropdown-menu {
+    background-color: #2d2d2d;
+    border-color: #404040;
+}
+
+[data-theme="dark"] .dropdown-item {
+    color: #e4e6eb;
+}
+
+[data-theme="dark"] .dropdown-item:hover,
+[data-theme="dark"] .dropdown-item:focus {
+    background-color: #404040;
+    color: #ffffff;
+}
+
+[data-theme="dark"] .dropdown-item.active,
+[data-theme="dark"] .dropdown-item:active {
+    background-color: #0d6efd;
+    color: white;
+}
+
+[data-theme="dark"] .dropdown-divider {
+    border-top-color: #404040;
+}
+
+[data-theme="dark"] .dropdown-header {
+    color: #9ca3af;
+}
+
+[data-theme="dark"] .btn-outline-light.dropdown-toggle {
+    color: #e4e6eb;
+    border-color: #404040;
+}
+
+[data-theme="dark"] .btn-outline-light.dropdown-toggle:hover,
+[data-theme="dark"] .btn-outline-light.dropdown-toggle:focus,
+[data-theme="dark"] .btn-outline-light.dropdown-toggle.show {
+    background-color: #404040;
+    color: #ffffff;
+    border-color: #555555;
+}
+
+/* Dropdown toggle icon color */
+.dropdown-toggle::after {
+    vertical-align: middle;
+}
+
+[data-theme="dark"] .dropdown-toggle::after {
+    color: #e4e6eb;
+}
+
+/* Ensure dropdown menu appears above other content */
+.dropdown-menu {
+    z-index: 1050;
+}

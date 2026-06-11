@@ -1,0 +1,174 @@
+# ============================================
+# Russian Translations for Video Server
+# ============================================
+
+# Navigation
+nav_home=Главная
+nav_videos=Все видео
+nav_queue=Очередь
+nav_storage=Хранилище
+tagline=Автономный видеосервер
+
+# Common
+loading=Загрузка...
+error=Ошибка
+success=Успешно
+cancel=Отмена
+save=Сохранить
+delete=Удалить
+close=Закрыть
+back=Назад
+search=Поиск
+filter=Фильтр
+status=Статус
+actions=Действия
+unknown=Неизвестно
+none=Нет
+yes=Да
+no=Нет
+confirm=Подтвердить
+warning=Предупреждение
+info=Информация
+details=Подробности
+
+# Video status
+status_ready=Готово
+status_pending=В очереди
+status_downloading=Загружается
+status_failed=Ошибка
+status_deleted=Удалено
+status_unknown=Неизвестно
+
+# Buttons
+btn_download=Загрузить видео
+btn_add_video=Добавить видео
+btn_view_all=Все видео
+btn_check_queue=Очередь
+btn_cleanup=Очистить старые
+btn_retry=Повторить
+btn_watch=Смотреть
+btn_stream=Стриминг
+btn_info=Инфо
+btn_refresh=Обновить
+btn_settings=Настройки
+btn_continue=Продолжить
+
+# Messages
+msg_video_added=Видео добавлено в очередь на загрузку
+msg_video_ready=Видео готово к просмотру
+msg_no_videos=Видео не найдены
+msg_no_results=По вашему запросу ничего не найдено
+msg_enter_url=Пожалуйста, введите корректную ссылку на видео
+msg_upload_first=Загрузите первое видео!
+msg_processing=Обработка...
+msg_please_wait=Пожалуйста, подождите...
+
+# Queue page
+queue_title=Система загрузок
+queue_subtitle=Управление очередью загрузок и мониторинг
+queue_system_active=Система активна
+queue_system_stopped=Система остановлена
+queue_info_unavailable=Информация об очереди временно недоступна
+queue_active_tasks=Активные задачи
+queue_queued_tasks=В очереди
+queue_workers=Воркеры
+queue_completed=Завершено
+queue_failed=Ошибки
+queue_retries=Повторы
+queue_no_active=Нет активных задач
+queue_empty=Очередь пуста
+queue_workers_free=Все воркеры свободны
+queue_workers_distribution=Распределение воркеров
+queue_free_slots=Свободно
+queue_of=из
+queue_total_workers=Всего воркеров
+queue_running=Работают
+queue_max_concurrent=Макс. параллельно
+queue_hash=Хеш
+queue_url=URL
+queue_worker=Воркер
+queue_started_at=Начата
+queue_duration=Длится
+queue_seconds=сек
+queue_added_at=Добавлена
+queue_showing_first=Показано 20 из
+queue_tasks=задач
+queue_no_tasks=Нет задач, ожидающих обработки
+queue_worker_name=Воркер
+
+# Storage page
+storage_title=Хранилище
+storage_usage=Использование хранилища
+storage_settings=Настройки
+storage_used=Использовано
+storage_free=Свободно
+storage_max_size=Макс. размер
+storage_video_count=Количество видео
+storage_status_good=Хорошо
+storage_status_warning=Внимание
+storage_status_critical=Критично
+storage_recommendations=Рекомендации
+storage_cleanup_triggered=Запущена очистка
+storage_cleanup_confirm=Вы уверены? Это удалит старые видео.
+storage_recommendation_good=Хранилище в порядке. Очистка не требуется.
+storage_recommendation_warning=Рекомендуется очистить старые видео. Автоочистка при новых загрузках.
+storage_recommendation_critical=Очистите немедленно! Новые загрузки могут не начаться.
+storage_info_unavailable=Информация о хранилище недоступна
+storage_info_error=Не удалось получить информацию о хранилище
+
+# Video page
+video_title=Название
+video_info=Информация
+video_author=Автор
+video_duration=Длительность
+video_size=Размер
+video_format=Формат
+video_views=Просмотров
+video_added=Добавлено
+video_last_viewed=Последний просмотр
+video_original_link=Исходная ссылка
+video_player_placeholder=Выберите режим воспроизведения
+video_play_video=Видео
+video_play_audio=Аудио
+video_navigation=Навигация
+video_previous=Предыдущее
+video_next=Следующее
+video_random_suggestion=Случайная подборка
+from_media_library=Из медиатеки
+
+# Player controls
+player_speed=Скорость воспроизведения
+player_audio_mode=Только аудио
+player_video_mode=Режим видео
+player_fullscreen=Полный экран
+player_mute=Отключить звук
+player_volume=Громкость
+
+# Forms
+form_url_label=Ссылка на видео
+form_url_placeholder=https://youtube.com/watch?v=...
+form_url_help=Поддерживаемые источники: YouTube, Vimeo и другие
+form_submit=Загрузить видео
+
+# Errors
+error_404=Видео не найдено
+error_invalid_url=Некорректный URL. Пожалуйста, введите валидную ссылку на видео.
+error_server=Внутренняя ошибка сервера
+error_file_missing=Файл видео отсутствует
+error_file_corrupted=Файл видео повреждён
+error_access_denied=Доступ запрещён
+error_timeout=Таймаут запроса
+
+# Time
+time_just_now=Только что
+time_minute_ago=1 минуту назад
+time_minutes_ago={count} минуты назад
+time_hour_ago=1 час назад
+time_hours_ago={count} часов назад
+time_day_ago=1 день назад
+time_days_ago={count} дней назад
+
+# Footer
+footer_github=GitHub
+footer_report_issue=Сообщить о проблеме
+footer_documentation=Документация
