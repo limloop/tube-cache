@@ -207,13 +207,14 @@ async def list_videos(
         # Don't filter - show all videos including deleted
         # all_videos stays as is
     
-    # Filter by search (safe: all_videos is always a list)
+    # Filter by search - supports title, uploader, and hash
     if search and all_videos:
         search_lower = search.lower()
         all_videos = [
             v for v in all_videos
-            if search_lower in (v.get('title', '').lower() or '') or
-               search_lower in (v.get('uploader', '').lower() or '')
+            if (search_lower in ((v.get('title') or '').lower()) or
+                search_lower in ((v.get('uploader') or '').lower()) or
+                search_lower in (v.get('hash', '').lower()))
         ]
     
     # Sort by creation date (newest first)
