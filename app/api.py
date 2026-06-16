@@ -178,8 +178,8 @@ async def request_video(url: str = Query(..., description="Video URL")):
         # Check database
         video = await db.get_video(video_hash)
         
+        # NEW VIDEO: Create record and start download
         if not video:
-            # New video - create record and add to queue
             await db.create_video(video_hash, url)
             await _cleanup_temp_files(video_hash)
             
@@ -203,45 +203,50 @@ async def request_video(url: str = Query(..., description="Video URL")):
                 message="Video added to download queue"
             )
         
-        # Existing video - check status
+        # EXISTING VIDEO: Check status and recover if needed
         status = VideoStatus(video['status'])
         
-        if status == VideoStatus.READY:
-            # Check if file exists
-            file_path = await storage.find_video_path(video_hash)
+        # 1. If FAILED or DELETED - restart download immediately
+        if status in [VideoStatus.FAILED, VideoStatus.DELETED]:
+            logger.info(f"Restarting {status.value} video: {video_hash}")
             
-            if not file_path or not file_path.exists():
-                logger.error(f"File missing for ready video: {video_hash}")
-                await db.mark_video_deleted(video_hash)
-                
-                # Recreate task
-                await db.update_status(video_hash, VideoStatus.PENDING)
-                await _cleanup_temp_files(video_hash)
-                await queue.add_task(video_hash, video['source_url'])
-                
+            # Reset status to PENDING
+            await db.update_status(video_hash, VideoStatus.PENDING)
+            await _cleanup_temp_files(video_hash)
+            
+            # Add to queue
+            added = await queue.add_task(video_hash, video['source_url'])
+            
+            if added:
                 return TaskStatus(
                     hash=video_hash,
                     status=VideoStatus.PENDING,
-                    message="File lost, restarting download"
+                    message=f"Restarting {status.value} download"
                 )
-            
-            # Check integrity
-            integrity_result = await check_video_file_integrity_extended(
-                file_path, video.get('file_size')
-            )
-            
-            if not integrity_result['valid']:
-                logger.error(f"Corrupted file: {video_hash}")
+            else:
+                position = await queue.get_queue_position(video_hash)
+                msg = f"{status.value} video, already in queue"
+                if position is not None:
+                    msg += f", position: {position + 1}"
+                return TaskStatus(
+                    hash=video_hash,
+                    status=VideoStatus.PENDING,
+                    message=msg
+                )
+        
+        # 2. If PENDING or DOWNLOADING - just return status
+        if status in [VideoStatus.PENDING, VideoStatus.DOWNLOADING]:
+            # Check if task is actually in queue (for DOWNLOADING)
+            if status == VideoStatus.DOWNLOADING:
+                queue_info = await queue.get_queue_info()
+                is_active = any(
+                    task['hash'].startswith(video_hash) 
+                    for task in queue_info.get('active_tasks_list', [])
+                )
                 
-                try:
-                    file_path.unlink()
-                except:
-                    pass
-                
-                await db.update_status(video_hash, VideoStatus.FAILED)
-                
-                retry_count = video.get('retry_count', 0)
-                if retry_count < 3:
+                if not is_active:
+                    # Task lost - restart
+                    logger.warning(f"DOWNLOADING but not active: {video_hash}, restarting")
                     await db.update_status(video_hash, VideoStatus.PENDING)
                     await _cleanup_temp_files(video_hash)
                     await queue.add_task(video_hash, video['source_url'])
@@ -249,16 +254,93 @@ async def request_video(url: str = Query(..., description="Video URL")):
                     return TaskStatus(
                         hash=video_hash,
                         status=VideoStatus.PENDING,
-                        message=f"File corrupted, retry ({retry_count + 1}/3)"
-                    )
-                else:
-                    return TaskStatus(
-                        hash=video_hash,
-                        status=VideoStatus.FAILED,
-                        message="Video corrupted and cannot be recovered"
+                        message="Task restarted"
                     )
             
-            # All good
+            # Get queue position
+            position = await queue.get_queue_position(video_hash)
+            message = "Video in download queue"
+            if position is not None:
+                message += f", position: {position + 1}"
+            
+            return TaskStatus(
+                hash=video_hash,
+                status=status,
+                message=message
+            )
+        
+        # 3. If READY - check file exists and is valid
+        if status == VideoStatus.READY:
+            # Check if file exists
+            file_path = await storage.find_video_path(video_hash)
+            
+            # If file missing or corrupted - mark as FAILED and restart
+            if not file_path or not file_path.exists():
+                logger.warning(f"File missing for READY video {video_hash}, re-downloading...")
+                
+                # Mark as FAILED first
+                await db.update_status(video_hash, VideoStatus.FAILED)
+                await _cleanup_temp_files(video_hash)
+                
+                # Restart download
+                added = await queue.add_task(video_hash, video['source_url'])
+                
+                if added:
+                    return TaskStatus(
+                        hash=video_hash,
+                        status=VideoStatus.PENDING,
+                        message="File missing, re-downloading..."
+                    )
+                else:
+                    position = await queue.get_queue_position(video_hash)
+                    msg = "File missing, already in queue"
+                    if position is not None:
+                        msg += f", position: {position + 1}"
+                    return TaskStatus(
+                        hash=video_hash,
+                        status=VideoStatus.PENDING,
+                        message=msg
+                    )
+            
+            # Check file integrity
+            integrity_result = await check_video_file_integrity_extended(
+                file_path, video.get('file_size')
+            )
+            
+            if not integrity_result['valid']:
+                logger.warning(f"Corrupted file {video_hash}, re-downloading...")
+                
+                # Delete corrupted file
+                try:
+                    file_path.unlink()
+                except:
+                    pass
+                
+                # Mark as FAILED
+                await db.update_status(video_hash, VideoStatus.FAILED)
+                await _cleanup_temp_files(video_hash)
+                
+                # Restart download
+                added = await queue.add_task(video_hash, video['source_url'])
+                
+                if added:
+                    return TaskStatus(
+                        hash=video_hash,
+                        status=VideoStatus.PENDING,
+                        message="File corrupted, re-downloading..."
+                    )
+                else:
+                    position = await queue.get_queue_position(video_hash)
+                    msg = "File corrupted, already in queue"
+                    if position is not None:
+                        msg += f", position: {position + 1}"
+                    return TaskStatus(
+                        hash=video_hash,
+                        status=VideoStatus.PENDING,
+                        message=msg
+                    )
+            
+            # All good - return ready
             return TaskStatus(
                 hash=video_hash,
                 status=VideoStatus.READY,
@@ -268,82 +350,17 @@ async def request_video(url: str = Query(..., description="Video URL")):
                 duration=video.get('duration')
             )
         
-        elif status == VideoStatus.FAILED:
-            retry_count = video.get('retry_count', 0)
-            if retry_count < 3:
-                await db.update_status(video_hash, VideoStatus.PENDING)
-                await _cleanup_temp_files(video_hash)
-                await queue.add_task(video_hash, video['source_url'])
-                
-                return TaskStatus(
-                    hash=video_hash,
-                    status=VideoStatus.PENDING,
-                    message=f"Restarting failed download ({retry_count + 1}/3)"
-                )
-            else:
-                return TaskStatus(
-                    hash=video_hash,
-                    status=VideoStatus.FAILED,
-                    message="Download failed after 3 attempts"
-                )
+        # 4. Unknown status - reset to PENDING
+        logger.warning(f"Unknown status {status} for {video_hash}, resetting")
+        await db.update_status(video_hash, VideoStatus.PENDING)
+        await _cleanup_temp_files(video_hash)
+        await queue.add_task(video_hash, video['source_url'])
         
-        elif status == VideoStatus.PENDING:
-            position = await queue.get_queue_position(video_hash)
-            
-            if position is None:
-                logger.warning(f"Task lost, recreating: {video_hash[:12]}")
-                await _cleanup_temp_files(video_hash)
-                await queue.add_task(video_hash, video['source_url'])
-                position = await queue.get_queue_position(video_hash)
-            
-            message = "Video in download queue"
-            if position is not None:
-                message += f", position: {position + 1}"
-            
-            return TaskStatus(
-                hash=video_hash,
-                status=VideoStatus.PENDING,
-                message=message
-            )
-        
-        elif status == VideoStatus.DOWNLOADING:
-            # Check if task is actually active
-            queue_info = await queue.get_queue_info()
-            is_active = any(
-                task['hash'].startswith(video_hash[:12]) 
-                for task in queue_info.get('active_tasks_list', [])
-            )
-            
-            if not is_active:
-                logger.warning(f"Task DOWNLOADING but not active: {video_hash[:12]}")
-                await db.update_status(video_hash, VideoStatus.PENDING)
-                await _cleanup_temp_files(video_hash)
-                await queue.add_task(video_hash, video['source_url'])
-                
-                return TaskStatus(
-                    hash=video_hash,
-                    status=VideoStatus.PENDING,
-                    message="Task restarted"
-                )
-            
-            return TaskStatus(
-                hash=video_hash,
-                status=VideoStatus.DOWNLOADING,
-                message="Video is downloading"
-            )
-        
-        else:
-            # Unknown status - recover
-            logger.warning(f"Unknown status {status} for {video_hash}")
-            await db.update_status(video_hash, VideoStatus.PENDING)
-            await _cleanup_temp_files(video_hash)
-            await queue.add_task(video_hash, video['source_url'])
-            
-            return TaskStatus(
-                hash=video_hash,
-                status=VideoStatus.PENDING,
-                message="Unknown status, restarting"
-            )
+        return TaskStatus(
+            hash=video_hash,
+            status=VideoStatus.PENDING,
+            message="Unknown status, resetting"
+        )
             
     except HTTPException:
         raise
@@ -391,7 +408,7 @@ async def stream_video(video_hash: str, request: Request):
     
     # Check integrity
     if not check_video_file_integrity(file_path):
-        logger.error(f"Corrupted file during streaming: {video_hash[:12]}")
+        logger.error(f"Corrupted file during streaming: {video_hash}")
         
         try:
             file_path.unlink()
