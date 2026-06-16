@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ video.title }} - Video Server{% endblock %}
+{% block title %}{{ video.title or 'Video' }} - Video Server{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/video-player.css">
@@ -18,8 +18,8 @@
             </div>
             <div class="card-footer">
                 <div class="d-flex justify-content-between">
-                    <span class="badge bg-secondary">{{ video.file_ext|upper }}</span>
-                    <span class="text-muted">{{ video.duration_str }} • {{ video.file_size }}</span>
+                    <span class="badge bg-secondary">{{ video.file_ext|upper or 'MP4' }}</span>
+                    <span class="text-muted">{{ video.duration_str or '—' }} • {{ video.file_size or '—' }}</span>
                 </div>
             </div>
         </div>
@@ -40,11 +40,11 @@
                                         <i class="bi bi-arrow-left-circle-fill text-primary"></i>
                                         <strong class="ms-1">{{ _('video_previous') }}</strong>
                                     </div>
-                                    <span class="badge bg-secondary">{{ prev_video.duration_str }}</span>
+                                    <span class="badge bg-secondary">{{ prev_video.duration_str or '—' }}</span>
                                 </div>
                                 <div class="mt-2">
-                                    <div class="fw-bold text-truncate">{{ prev_video.title }}</div>
-                                    <small class="text-muted">{{ prev_video.uploader }}</small>
+                                    <div class="fw-bold text-truncate">{{ prev_video.title or 'Untitled' }}</div>
+                                    <small class="text-muted">{{ prev_video.uploader or 'Unknown' }}</small>
                                 </div>
                             </div>
                         </a>
@@ -65,11 +65,11 @@
                                         <i class="bi bi-arrow-right-circle-fill text-primary"></i>
                                         <strong class="ms-1">{{ _('video_next') }}</strong>
                                     </div>
-                                    <span class="badge bg-secondary">{{ next_video.duration_str }}</span>
+                                    <span class="badge bg-secondary">{{ next_video.duration_str or '—' }}</span>
                                 </div>
                                 <div class="mt-2">
-                                    <div class="fw-bold text-truncate">{{ next_video.title }}</div>
-                                    <small class="text-muted">{{ next_video.uploader }}</small>
+                                    <div class="fw-bold text-truncate">{{ next_video.title or 'Untitled' }}</div>
+                                    <small class="text-muted">{{ next_video.uploader or 'Unknown' }}</small>
                                 </div>
                             </div>
                         </a>
@@ -98,10 +98,10 @@
                         <a href="/video/{{ rec.hash }}" class="text-decoration-none">
                             <div class="card h-100 border-secondary recommendation-card">
                                 <div class="card-body p-3">
-                                    <h6 class="card-title text-truncate mb-2">{{ rec.title }}</h6>
+                                    <h6 class="card-title text-truncate mb-2">{{ rec.title or 'Untitled' }}</h6>
                                     <div class="d-flex justify-content-between align-items-center">
-                                        <small class="text-muted text-truncate">{{ rec.uploader }}</small>
-                                        <span class="badge bg-secondary">{{ rec.duration_str }}</span>
+                                        <small class="text-muted text-truncate">{{ rec.uploader or 'Unknown' }}</small>
+                                        <span class="badge bg-secondary">{{ rec.duration_str or '—' }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -120,20 +120,20 @@
                 <h5 class="mb-0"><i class="bi bi-info-circle"></i> {{ _('video_info') }}</h5>
             </div>
             <div class="card-body">
-                <h4 class="card-title">{{ video.title }}</h4>
+                <h4 class="card-title">{{ video.title or 'Untitled' }}</h4>
                 
                 <dl class="row mt-3">
                     <dt class="col-sm-4">{{ _('video_author') }}:</dt>
-                    <dd class="col-sm-8">{{ video.uploader }}</dd>
+                    <dd class="col-sm-8">{{ video.uploader or 'Unknown' }}</dd>
                     
                     <dt class="col-sm-4">{{ _('video_duration') }}:</dt>
-                    <dd class="col-sm-8">{{ video.duration_str }}</dd>
+                    <dd class="col-sm-8">{{ video.duration_str or '—' }}</dd>
                     
                     <dt class="col-sm-4">{{ _('video_size') }}:</dt>
-                    <dd class="col-sm-8">{{ video.file_size }}</dd>
+                    <dd class="col-sm-8">{{ video.file_size or '—' }}</dd>
                     
                     <dt class="col-sm-4">{{ _('video_format') }}:</dt>
-                    <dd class="col-sm-8">{{ video.file_ext|upper }}</dd>
+                    <dd class="col-sm-8">{{ (video.file_ext|upper) or 'MP4' }}</dd>
                     
                     <dt class="col-sm-4">{{ _('status') }}:</dt>
                     <dd class="col-sm-8">
@@ -143,7 +143,7 @@
                     </dd>
                     
                     <dt class="col-sm-4">{{ _('video_views') }}:</dt>
-                    <dd class="col-sm-8">{{ video.access_count }}</dd>
+                    <dd class="col-sm-8">{{ video.access_count or 0 }}</dd>
                     
                     <dt class="col-sm-4">{{ _('video_added') }}:</dt>
                     <dd class="col-sm-8">{{ video.created_at if video.created_at else '—' }}</dd>
@@ -161,9 +161,20 @@
                 <hr>
                 
                 <div class="d-grid gap-2">
+                    {% if video.status == 'ready' and file_exists %}
                     <a href="/stream/{{ video.hash }}" class="btn btn-primary" target="_blank">
                         <i class="bi bi-play-fill"></i> {{ _('btn_watch') }}
                     </a>
+                    {% elif video.status == 'ready' and not file_exists %}
+                    <button onclick="recoverVideo('{{ video.hash }}')" class="btn btn-warning">
+                        <i class="bi bi-arrow-clockwise"></i> {{ _('btn_recover') }}
+                    </button>
+                    {% else %}
+                    <a href="/videos" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> {{ _('back') }}
+                    </a>
+                    {% endif %}
+                    
                     <a href="{{ video.source_url }}" class="btn btn-outline-secondary" target="_blank">
                         <i class="bi bi-link-45deg"></i> {{ _('video_original_link') }}
                     </a>
@@ -175,16 +186,44 @@
         </div>
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
+<script>
+function recoverVideo(hash) {
+    const btn = document.querySelector('.btn-warning');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> {{ _('msg_please_wait') }}...';
+    }
+    
+    fetch(`/video?url=${encodeURIComponent(window.location.origin + '/video/' + hash)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'pending') {
+                window.location.href = `/video/${hash}`;
+            } else {
+                location.reload();
+            }
+        })
+        .catch(err => {
+            console.error('Recovery failed:', err);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> {{ _('btn_recover') }}';
+            }
+            alert('{{ _('error_recovery_failed') }}');
+        });
+}
+</script>
+
 <script src="/static/js/video-player.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const container = document.querySelector('#player-container');
-    const videoHash = container.dataset.hash;
-    const videoTitle = container.dataset.title;
-    window.player = new TubePlayer(videoHash, videoTitle);
+    if (container && container.dataset.hash) {
+        const videoHash = container.dataset.hash;
+        const videoTitle = container.dataset.title || 'Video';
+        window.player = new TubePlayer(videoHash, videoTitle);
+    }
 });
 </script>
 {% endblock %}

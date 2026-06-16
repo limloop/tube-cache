@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Video Server{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h4 class="mb-0">
+                    <i class="bi bi-hourglass-split"></i> {{ status_text }}
+                </h4>
+            </div>
+            <div class="card-body text-center py-5">
+                <div class="display-1 text-info mb-4">
+                    <i class="bi bi-arrow-repeat spinning"></i>
+                </div>
+                <h3>{{ status_text }}</h3>
+                <p class="text-muted">
+                    {{ _('msg_please_wait') }}
+                </p>
+                <p class="text-muted small">
+                    <strong>{{ _('video_title') }}:</strong> {{ title }}
+                    <br>
+                    <code>{{ video_hash[:12] }}...</code>
+                </p>
+                <div class="mt-4">
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" 
+                             style="width: 100%">
+                            {{ _('loading') }}...
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <a href="/videos" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> {{ _('back') }}
+                    </a>
+                    <button onclick="location.reload()" class="btn btn-outline-primary ms-2">
+                        <i class="bi bi-arrow-clockwise"></i> {{ _('btn_refresh') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.spinning {
+    animation: spin 2s linear infinite;
+}
+</style>
+
+<script>
+// Auto-refresh every 10 seconds to check status
+setTimeout(() => location.reload(), 10000);
+</script>
+{% endblock %}

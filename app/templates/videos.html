@@ -80,18 +80,18 @@
                 {% for video in videos %}
                 <tr>
                     <td>
-                        <strong>{{ video.title|truncate(40) }}</strong>
+                        <strong>{{ (video.title or 'Untitled')|truncate(40) }}</strong>
                         <br>
                         <small class="text-muted">{{ video.short_hash }}</small>
                     </td>
                     <td>
-                        {{ video.uploader|truncate(20) }}
+                        {{ (video.uploader or 'Unknown')|truncate(20) }}
                     </td>
                     <td>
-                        {{ video.duration_str }}
+                        {{ video.duration_str or '—' }}
                     </td>
                     <td>
-                        {{ video.file_size }}
+                        {{ video.file_size or '—' }}
                     </td>
                     <td>
                         <span class="badge {{ video.status_badge_class }}">

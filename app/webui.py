@@ -158,23 +158,57 @@ async def list_videos(
     search: str = Query(""),
     status_filter: str = Query("ready", alias="status")
 ):
-    """List all videos with pagination and search"""
+    """
+    List all videos with pagination and search.
+    Auto-checks READY videos for file existence.
+    """
     # Get videos based on filter
-    if status_filter == "ready":
-        all_videos = await db.get_all_ready_videos()
-    elif status_filter == "pending":
-        all_videos = await db.get_videos_by_status(VideoStatus.PENDING)
-    elif status_filter == "downloading":
-        all_videos = await db.get_videos_by_status(VideoStatus.DOWNLOADING)
-    elif status_filter == "failed":
-        all_videos = await db.get_videos_by_status(VideoStatus.FAILED)
-    elif status_filter == "deleted":
-        all_videos = await db.get_videos_by_status(VideoStatus.DELETED)
-    else:
-        all_videos = await db.get_all_videos()
+    all_videos = []
     
-    # Filter by search
-    if search:
+    if status_filter == "ready":
+        all_videos = await db.get_all_ready_videos() or []
+        
+        # Quick check: verify file exists for READY videos
+        for video in all_videos:
+            file_path = await storage.find_video_path(video['hash'])
+            if not file_path or not file_path.exists():
+                logger.debug(f"Marking as DELETED (file missing): {video['hash'][:12]}")
+                await db.mark_video_deleted(video['hash'])
+                video['status'] = 'deleted'
+        
+        # Re-filter after updates (remove deleted)
+        all_videos = [v for v in all_videos if v.get('status') != 'deleted']
+        
+    elif status_filter == "pending":
+        all_videos = await db.get_videos_by_status(VideoStatus.PENDING) or []
+        
+    elif status_filter == "downloading":
+        all_videos = await db.get_videos_by_status(VideoStatus.DOWNLOADING) or []
+        
+    elif status_filter == "failed":
+        all_videos = await db.get_videos_by_status(VideoStatus.FAILED) or []
+        
+    elif status_filter == "deleted":
+        all_videos = await db.get_videos_by_status(VideoStatus.DELETED) or []
+        
+    else:  # "all" - get ALL videos regardless of status
+        all_videos = await db.get_all_videos() or []
+        
+        # Check READY videos for file existence (but keep them even if missing)
+        for video in all_videos:
+            if video.get('status') == 'ready':
+                file_path = await storage.find_video_path(video['hash'])
+                if not file_path or not file_path.exists():
+                    logger.debug(f"File missing for READY video: {video['hash'][:12]}")
+                    # Mark as DELETED but keep in list (user will see status changed)
+                    await db.mark_video_deleted(video['hash'])
+                    video['status'] = 'deleted'
+        
+        # Don't filter - show all videos including deleted
+        # all_videos stays as is
+    
+    # Filter by search (safe: all_videos is always a list)
+    if search and all_videos:
         search_lower = search.lower()
         all_videos = [
             v for v in all_videos
@@ -183,22 +217,19 @@ async def list_videos(
         ]
     
     # Sort by creation date (newest first)
-    all_videos.sort(key=lambda x: get_date_sort_key(x, 'created_at'), reverse=True)
+    if all_videos:
+        all_videos.sort(key=lambda x: get_date_sort_key(x, 'created_at'), reverse=True)
     
     # Pagination
-    page_size = 20
     total_videos = len(all_videos)
-    total_pages = max(1, math.ceil(total_videos / page_size))
-    
-    # Adjust page if out of bounds
+    total_pages = max(1, math.ceil(total_videos / 20) if total_videos > 0 else 1)
     page = max(1, min(page, total_pages))
     
-    # Get videos for current page
-    start_idx = (page - 1) * page_size
-    end_idx = start_idx + page_size
-    videos = all_videos[start_idx:end_idx]
+    start_idx = (page - 1) * 20
+    end_idx = start_idx + 20
+    videos = all_videos[start_idx:end_idx] if all_videos else []
     
-    # Get translate function for status text
+    # Get translate function
     context = get_base_context(request)
     _ = context['_']
     
@@ -206,7 +237,6 @@ async def list_videos(
     formatted_videos = []
     for video in videos:
         status = video.get('status', 'unknown')
-        # Status text with icon using translation
         status_icons = {
             'ready': '✅',
             'downloading': '📥',
@@ -221,7 +251,6 @@ async def list_videos(
             'failed': _('status_failed'),
             'deleted': _('status_deleted')
         }
-        
         status_badge_classes = {
             'ready': 'bg-success',
             'downloading': 'bg-info',
@@ -233,8 +262,8 @@ async def list_videos(
         formatted_videos.append({
             'hash': video['hash'],
             'short_hash': video['hash'][:12] + '...',
-            'title': video.get('title', 'Untitled'),
-            'uploader': video.get('uploader', 'Unknown'),
+            'title': video.get('title') or 'Untitled',
+            'uploader': video.get('uploader') or 'Unknown',
             'duration': video.get('duration'),
             'duration_str': format_duration(video.get('duration')),
             'file_size': format_file_size(video.get('file_size')),
@@ -264,18 +293,65 @@ async def list_videos(
 
 @router.get("/video/{video_hash}", response_class=HTMLResponse)
 async def video_detail(request: Request, video_hash: str):
-    """Video detail page with player and metadata"""
+    """
+    Video detail page with player and metadata.
+    Pure display - does NOT modify video state.
+    Shows appropriate UI for missing/corrupted videos.
+    """
+    # Get video from DB
     video = await db.get_video(video_hash)
     context = get_base_context(request)
     _ = context['_']
     
     if not video:
-        return templates.TemplateResponse("error.html", {
+        return templates.TemplateResponse("video_not_found.html", {
             **context,
-            "error": _('error_404')
+            "video_hash": video_hash,
+            "error_code": 404
         })
     
-    # Get ready videos for navigation
+    # Check if file exists for READY videos
+    file_exists = False
+    status = video.get('status', 'unknown')
+    
+    if status == 'ready':
+        file_path = await storage.find_video_path(video_hash)
+        file_exists = file_path is not None and file_path.exists()
+        
+        # If file missing but status is READY - show warning page
+        if not file_exists:
+            return templates.TemplateResponse("video_missing.html", {
+                **context,
+                "video": video,
+                "video_hash": video_hash,
+                "title": video.get('title', 'Untitled'),
+                "source_url": video.get('source_url', '#'),
+            })
+    
+    # If status is FAILED or DELETED - show appropriate page
+    if status in ['failed', 'deleted']:
+        return templates.TemplateResponse("video_unavailable.html", {
+            **context,
+            "video": video,
+            "video_hash": video_hash,
+            "title": video.get('title', 'Untitled'),
+            "status": status,
+            "status_text": _('status_failed') if status == 'failed' else _('status_deleted'),
+            "source_url": video.get('source_url', '#'),
+        })
+    
+    # If PENDING or DOWNLOADING - show loading state
+    if status in ['pending', 'downloading']:
+        return templates.TemplateResponse("video_loading.html", {
+            **context,
+            "video": video,
+            "video_hash": video_hash,
+            "title": video.get('title', 'Untitled'),
+            "status": status,
+            "status_text": _('status_pending') if status == 'pending' else _('status_downloading'),
+        })
+    
+    # Get ready videos for navigation (only for valid videos)
     ready_videos = await db.get_all_ready_videos()
     ready_videos.sort(key=lambda v: v.get('created_at', ''), reverse=False)
     
@@ -302,8 +378,7 @@ async def video_detail(request: Request, video_hash: str):
     if other_ready:
         random_videos = random.sample(other_ready, min(5, len(other_ready)))
     
-    # Status text
-    status = video.get('status', 'unknown')
+    # Format current video
     status_icons = {
         'ready': '✅',
         'downloading': '📥',
@@ -326,7 +401,6 @@ async def video_detail(request: Request, video_hash: str):
         'deleted': 'bg-secondary'
     }
     
-    # Format current video
     formatted_video = {
         'hash': video_hash,
         'short_hash': video_hash[:12] + '...',
@@ -374,6 +448,7 @@ async def video_detail(request: Request, video_hash: str):
         "prev_video": format_neighbor(prev_video),
         "next_video": format_neighbor(next_video),
         "random_videos": [format_neighbor(v) for v in random_videos],
+        "file_exists": file_exists,
     })
 
 

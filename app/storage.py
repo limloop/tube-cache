@@ -338,7 +338,7 @@ class StorageManager:
         """
         try:
             stats = await db.get_storage_stats()
-            used_bytes = stats.get('total_size', 0)
+            used_bytes = stats.get('total_size', 0) or 0
             
             used_percent = 0
             if self.max_size_bytes > 0:
@@ -347,7 +347,7 @@ class StorageManager:
             return {
                 'total_size_bytes': used_bytes,
                 'max_size_bytes': self.max_size_bytes,
-                'video_count': stats.get('video_count', 0),
+                'video_count': stats.get('video_count', 0) or 0,
                 'used_percent': round(used_percent, 1),
                 'free_bytes': max(0, self.max_size_bytes - used_bytes),
                 'free_percent': round(max(0, 100 - used_percent), 1)

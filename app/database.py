@@ -149,7 +149,12 @@ class Database:
         status: VideoStatus,
         limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
-        """Оптимизированное получение видео по статусу"""
+        """
+        Get videos by status.
+        
+        Returns:
+            List of video dicts (empty list if none found)
+        """
         try:
             query = SQL_QUERIES["get_by_status"]
             if limit:
@@ -159,52 +164,97 @@ class Database:
             rows = await cursor.fetchall()
             await cursor.close()
             
-            videos = []
-            if rows:
-                columns = [description[0] for description in cursor.description]
-                videos = [dict(zip(columns, row)) for row in rows]
+            if not rows:
+                return []
             
-            return videos
+            columns = [description[0] for description in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
+            
         except Exception as e:
-            logger.error(f"Ошибка получения видео по статусу {status}: {e}")
+            logger.error(f"Error getting videos by status {status}: {e}")
             return []
-    
+
+
     async def get_all_ready_videos(self) -> List[Dict[str, Any]]:
-        """Оптимизированное получение всех готовых видео"""
+        """
+        Get all ready videos.
+        
+        Returns:
+            List of video dicts (empty list if none found)
+        """
         try:
             cursor = await self.conn.execute(SQL_QUERIES["get_all_ready"])
             rows = await cursor.fetchall()
             await cursor.close()
             
-            videos = []
-            if rows:
-                columns = [description[0] for description in cursor.description]
-                videos = [dict(zip(columns, row)) for row in rows]
+            if not rows:
+                return []
             
-            return videos
+            columns = [description[0] for description in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
+            
         except Exception as e:
-            logger.error(f"Ошибка получения всех готовых видео: {e}")
+            logger.error(f"Error getting all ready videos: {e}")
             return []
 
+
     async def get_all_videos(self) -> List[Dict[str, Any]]:
-        """Оптимизированное получение всех готовых видео"""
+        """
+        Get all videos.
+        
+        Returns:
+            List of video dicts (empty list if none found)
+        """
         try:
             cursor = await self.conn.execute(SQL_QUERIES["get_all"])
             rows = await cursor.fetchall()
             await cursor.close()
             
-            videos = []
-            if rows:
-                columns = [description[0] for description in cursor.description]
-                videos = [dict(zip(columns, row)) for row in rows]
+            if not rows:
+                return []
             
-            return videos
+            columns = [description[0] for description in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
+            
         except Exception as e:
-            logger.error(f"Ошибка получения всех готовых видео: {e}")
+            logger.error(f"Error getting all videos: {e}")
             return []
+
     
+    async def get_pending_videos(self) -> List[Dict[str, Any]]:
+        """
+        Get all pending or downloading videos for queue recovery.
+        
+        Returns:
+            List of video dicts (empty list if none found)
+        """
+        try:
+            cursor = await self.conn.execute("""
+                SELECT hash, source_url, status FROM videos 
+                WHERE status IN ('pending', 'downloading')
+                ORDER BY created_at
+            """)
+            rows = await cursor.fetchall()
+            await cursor.close()
+            
+            if not rows:
+                return []
+            
+            columns = [description[0] for description in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
+            
+        except Exception as e:
+            logger.error(f"Error getting pending videos: {e}")
+            return []
+
+
     async def get_storage_stats(self) -> Dict[str, Any]:
-        """Оптимизированное получение статистики"""
+        """
+        Get storage statistics.
+        
+        Returns:
+            Dict with video_count and total_size
+        """
         try:
             cursor = await self.conn.execute(SQL_QUERIES["get_storage_stats"])
             row = await cursor.fetchone()
@@ -215,8 +265,9 @@ class Database:
                 return dict(zip(columns, row))
             
             return {'video_count': 0, 'total_size': 0}
+            
         except Exception as e:
-            logger.error(f"Ошибка получения статистики: {e}")
+            logger.error(f"Error getting storage stats: {e}")
             return {'video_count': 0, 'total_size': 0}
     
     async def get_video_hash_by_url(self, url: str) -> Optional[str]:
@@ -286,33 +337,6 @@ class Database:
         except Exception as e:
             logger.error(f"Ошибка пометки видео как удаленного {video_hash}: {e}")
             return False
-
-    async def get_pending_videos(self) -> List[Dict[str, Any]]:
-        """
-        Получает все видео со статусом pending или downloading
-        
-        Returns:
-            Список видео для восстановления очереди
-        """
-        try:
-            cursor = await self.conn.execute("""
-                SELECT hash, source_url, status FROM videos 
-                WHERE status IN ('pending', 'downloading')
-                ORDER BY created_at
-            """)
-            rows = await cursor.fetchall()
-            await cursor.close()
-            
-            videos = []
-            if rows:
-                columns = [description[0] for description in cursor.description]
-                videos = [dict(zip(columns, row)) for row in rows]
-            
-            logger.debug(f"Найдено pending/downloading видео: {len(videos)}")
-            return videos
-        except Exception as e:
-            logger.error(f"Ошибка получения pending видео: {e}")
-            return []
 
 # Глобальный экземпляр
 db = Database()

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Video Server{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header {% if status == 'failed' %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}">
+                <h4 class="mb-0">
+                    {% if status == 'failed' %}
+                        <i class="bi bi-x-circle"></i> {{ _('status_failed') }}
+                    {% else %}
+                        <i class="bi bi-trash"></i> {{ _('status_deleted') }}
+                    {% endif %}
+                </h4>
+            </div>
+            <div class="card-body text-center py-5">
+                <div class="display-1 {% if status == 'failed' %}text-danger{% else %}text-secondary{% endif %} mb-4">
+                    {% if status == 'failed' %}
+                        <i class="bi bi-exclamation-circle"></i>
+                    {% else %}
+                        <i class="bi bi-archive"></i>
+                    {% endif %}
+                </div>
+                <h3>{{ status_text }}</h3>
+                <p class="text-muted">
+                    {% if status == 'failed' %}
+                        {{ _('msg_video_failed_description') }}
+                    {% else %}
+                        {{ _('msg_video_deleted_description') }}
+                    {% endif %}
+                </p>
+                <p class="text-muted small">
+                    <strong>{{ _('video_title') }}:</strong> {{ title }}
+                    <br>
+                    <code>{{ video_hash[:12] }}...</code>
+                </p>
+                <div class="d-flex justify-content-center gap-3 mt-4">
+                    <button onclick="recoverVideo('{{ video_hash }}')" class="btn btn-primary btn-lg">
+                        <i class="bi bi-arrow-clockwise"></i> {{ _('btn_retry') }}
+                    </button>
+                    <a href="/videos" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> {{ _('back') }}
+                    </a>
+                </div>
+            </div>
+            <div class="card-footer text-muted">
+                <small>
+                    <i class="bi bi-info-circle"></i>
+                    {{ _('msg_recovery_info') }}
+                </small>
+                {% if source_url %}
+                <span class="ms-3">
+                    <a href="{{ source_url }}" target="_blank" class="text-muted">
+                        <i class="bi bi-link-45deg"></i> {{ _('video_original_link') }}
+                    </a>
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function recoverVideo(hash) {
+    const btn = document.querySelector('.btn-primary, .btn-warning');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> {{ _('msg_please_wait') }}...';
+    
+    fetch(`/video?url=${encodeURIComponent(window.location.origin + '/video/' + hash)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'pending') {
+                window.location.href = `/video/${hash}`;
+            } else {
+                location.reload();
+            }
+        })
+        .catch(err => {
+            console.error('Recovery failed:', err);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> {{ _('btn_retry') }}';
+            alert('{{ _('error_recovery_failed') }}');
+        });
+}
+</script>
+{% endblock %}
