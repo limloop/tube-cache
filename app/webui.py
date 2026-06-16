@@ -13,7 +13,7 @@ from datetime import datetime
 from app.database import db
 from app.queue import queue
 from app.storage import storage
-from app.utils import normalize_video_url, get_date_sort_key
+from app.utils import process_url, get_date_sort_key
 from app.models import VideoStatus
 from app.i18n import get_language_switcher_context, get_language_from_request
 from app import logger
@@ -135,18 +135,18 @@ async def home(request: Request):
 
 @router.post("/download", response_class=HTMLResponse)
 async def download_video(request: Request, url: str = Form(...)):
-    """Handle video download form submission"""
-    normalized_url = normalize_video_url(url)
+    """Handle video download form submission."""
+    processed_url, error = await process_url(url)
     
-    if not normalized_url:
+    if not processed_url:
         context = get_base_context(request)
         return templates.TemplateResponse("error.html", {
             **context,
-            "error": context['_']('invalid_url')
+            "error": error or context['_']('invalid_url')
         })
     
     return RedirectResponse(
-        url=f"/video?url={normalized_url}",
+        url=f"/video?url={processed_url}",
         status_code=303
     )
 

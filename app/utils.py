@@ -8,10 +8,11 @@ import subprocess
 import asyncio
 import shutil
 import json
+import aiohttp
 from pathlib import Path
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
-from typing import Tuple, Dict, Any, Optional
+from typing import Tuple, Dict, Any, Optional, List
 
 from app.config import settings
 from app import logger
@@ -31,23 +32,12 @@ def normalize_title(title: str) -> str:
     """
     Clean video title from dangerous characters only.
     Preserves emoji, non-latin characters and original format.
-    
-    Args:
-        title: Original title
-        
-    Returns:
-        Cleaned title for safe database storage
     """
     if not title or not isinstance(title, str):
         return ""
     
-    # Remove dangerous filesystem characters only
     title = _UNSAFE_CHARS_PATTERN.sub('', title)
-    
-    # Replace multiple spaces with single
     title = _MULTIPLE_SPACES_PATTERN.sub(' ', title)
-    
-    # Strip whitespace from edges
     title = _WHITESPACE_PATTERN.sub('', title)
     
     return title
@@ -65,14 +55,11 @@ def extract_domain(url: str) -> str:
     """
     try:
         parsed = urlparse(url)
-        domain = parsed.netloc
+        domain = parsed.netloc.lower()
         
-        # Remove www, port and lowercase
-        domain = domain.lower()
         if domain.startswith('www.'):
             domain = domain[4:]
         
-        # Remove port if present
         if ':' in domain:
             domain = domain.split(':')[0]
             
@@ -82,52 +69,25 @@ def extract_domain(url: str) -> str:
 
 
 def generate_video_hash(url: str, quality_params: str = "") -> str:
-    """
-    Generate unique 64-character SHA256 hash for video.
-    
-    Args:
-        url: Video URL
-        quality_params: Quality parameters from config
-        
-    Returns:
-        64-character hex hash
-    """
+    """Generate unique 64-character SHA256 hash for video."""
     combined = f"{url}|{quality_params}"
     return hashlib.sha256(combined.encode('utf-8')).hexdigest()
 
 
 def get_download_config_for_url(url: str) -> Tuple[str, bool]:
-    """
-    Get download configuration for specific URL.
-    
-    Args:
-        url: Video URL
-        
-    Returns:
-        Tuple of (format, extract_audio)
-    """
+    """Get download configuration for specific URL."""
     domain = extract_domain(url)
     
-    # Look for domain-specific config
     if domain in settings.sources:
         source_config = settings.sources[domain]
     else:
-        # Use default config
         source_config = settings.sources.get("default")
     
     return source_config.format, source_config.extract_audio
 
 
 def format_file_size(size_bytes: Optional[int]) -> str:
-    """
-    Format file size to human readable.
-    
-    Args:
-        size_bytes: Size in bytes or None
-        
-    Returns:
-        Formatted string
-    """
+    """Format file size to human readable."""
     if size_bytes is None:
         return "Unknown"
     
@@ -144,161 +104,243 @@ def format_file_size(size_bytes: Optional[int]) -> str:
     return f"{size:.1f} TB"
 
 
-def normalize_youtube_url(url: str) -> str:
+# ============================================
+# URL Normalization (config-driven)
+# ============================================
+
+def normalize_url_by_rules(url: str) -> str:
     """
-    Normalize YouTube URL to standard format.
+    Normalize URL using rules from config.
     
-    Extracts only video_id, removes all other parameters.
-    
-    Returns: https://www.youtube.com/watch?v=VIDEO_ID
-    
-    Args:
-        url: Any YouTube URL
-        
-    Returns:
-        Normalized URL with only video_id
+    Uses normalization_rules from url_filter config.
+    Supports:
+    - keep_params: comma-separated list of params to keep
+    - normalize_to: template with {video_id} placeholder
+    - video_id_pattern: regex to extract video_id
     """
     try:
-        # Add scheme if missing
-        if not url.startswith(('http://', 'https://')):
-            url = 'https://' + url
+        domain = extract_domain(url)
+        rules = settings.url_filter.normalization_rules
         
-        parsed = urlparse(url)
-        domain = parsed.netloc.lower()
+        for rule_domain, rule in rules.items():
+            if domain == rule_domain or domain == f"www.{rule_domain}":
+                pattern = rule.get('video_id_pattern')
+                if pattern:
+                    match = re.search(pattern, url)
+                    if match:
+                        video_id = match.group(1)
+                        template = rule.get('normalize_to')
+                        
+                        if template and '{video_id}' in template:
+                            normalized = template.format(video_id=video_id)
+                            
+                            # Handle keep_params if present
+                            keep_params = rule.get('keep_params')
+                            if keep_params:
+                                # Parse original URL params
+                                parsed = urlparse(url)
+                                query_params = parse_qs(parsed.query)
+                                
+                                # Keep only specified params
+                                keep_list = [p.strip() for p in keep_params.split(',') if p.strip()]
+                                if keep_list and query_params:
+                                    filtered_params = {}
+                                    for param in keep_list:
+                                        if param in query_params:
+                                            filtered_params[param] = query_params[param][0]
+                                    
+                                    if filtered_params:
+                                        # Parse normalized URL and add filtered params
+                                        norm_parsed = urlparse(normalized)
+                                        existing_params = parse_qs(norm_parsed.query)
+                                        
+                                        # Merge with existing params (keep_params override)
+                                        for key, value in filtered_params.items():
+                                            existing_params[key] = [value]
+                                        
+                                        new_query = urlencode(existing_params, doseq=True)
+                                        normalized = urlunparse((
+                                            norm_parsed.scheme,
+                                            norm_parsed.netloc,
+                                            norm_parsed.path,
+                                            norm_parsed.params,
+                                            new_query,
+                                            norm_parsed.fragment
+                                        ))
+                            
+                            return normalized
         
-        # Normalize domain
-        if domain in ['youtu.be', 'www.youtu.be']:
-            # Short youtu.be links
-            video_id = parsed.path.strip('/').split('?')[0]
-            if video_id:
-                return f"https://www.youtube.com/watch?v={video_id}"
-        
-        elif 'youtube.com' in domain:
-            # All youtube.com variants
-            query_params = parse_qs(parsed.query)
-            video_id = query_params.get('v', [None])[0]
-            
-            # Check other formats if v param missing
-            if not video_id:
-                # Check /embed/VIDEO_ID format
-                if '/embed/' in parsed.path:
-                    video_id = parsed.path.split('/embed/')[1].split('?')[0].split('/')[0]
-                # Check /v/VIDEO_ID format
-                elif '/v/' in parsed.path:
-                    video_id = parsed.path.split('/v/')[1].split('?')[0].split('/')[0]
-            
-            if video_id:
-                # Clean video_id from extra params
-                video_id = video_id.split('&')[0].split('?')[0].split('#')[0]
-                
-                # Create normalized URL with ONLY v parameter
-                normalized_query = urlencode({'v': video_id})
-                normalized_url = urlunparse((
-                    'https',
-                    'www.youtube.com',
-                    '/watch',
-                    '',
-                    normalized_query,
-                    ''
-                ))
-                return normalized_url
-        
-        # Not recognized as YouTube
         return url
         
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Normalization error for {url}: {e}")
         return url
 
 
 def clean_and_validate_url(url: str) -> Optional[str]:
     """
-    Clean URL from quotes and extra characters, validate.
-    
-    Args:
-        url: Raw URL (may have quotes, spaces, etc.)
-        
-    Returns:
-        Cleaned valid URL or None if invalid
+    Clean URL from quotes and extra characters, validate basic format.
     """
     if not url or not isinstance(url, str):
         return None
     
-    # Strip whitespace
     url = url.strip()
     
-    # Remove quotes of all types
     quotes = ['"', "'", '`', '```', '````', '«', '»', '“', '”']
     for quote in quotes:
         if url.startswith(quote) and url.endswith(quote):
             url = url[1:-1].strip()
     
-    # Remove angle brackets
     if url.startswith('<') and url.endswith('>'):
         url = url[1:-1].strip()
     
-    # Must contain a dot (domain) and slash or question mark
     if '.' not in url:
         return None
     
-    # Minimum length check
     if len(url) < 10:
         return None
     
-    # Add scheme if missing
     if not url.startswith(('http://', 'https://')):
         url = 'https://' + url
     
-    # Validate via urlparse
     try:
         parsed = urlparse(url)
-        
-        # Must have domain
         if not parsed.netloc or '.' not in parsed.netloc:
             return None
-        
-        # Domain must be at least 3 chars
         if len(parsed.netloc) < 3:
             return None
-        
         return url
-        
     except Exception:
         return None
 
 
 def normalize_video_url(url: str) -> Optional[str]:
     """
-    Recognize and normalize video URL.
-    
-    Args:
-        url: Video URL (may have quotes, spaces, etc.)
-        
-    Returns:
-        Normalized URL or None if invalid
+    Full URL normalization pipeline:
+    1. Clean and validate basic format
+    2. Apply config-driven normalization rules
     """
-    # Clean URL first
-    cleaned_url = clean_and_validate_url(url)
-    
-    if not cleaned_url:
+    cleaned = clean_and_validate_url(url)
+    if not cleaned:
         return None
     
+    return normalize_url_by_rules(cleaned)
+
+
+# ============================================
+# URL Filtering (config-driven)
+# ============================================
+
+def is_domain_allowed(url: str) -> bool:
+    """
+    Check if URL domain is in allowed list.
+    
+    Returns True if:
+    - allowed_domains is empty (all domains allowed)
+    - domain matches an entry in allowed_domains
+    """
+    if not settings.url_filter.allowed_domains:
+        return True
+    
     try:
-        parsed = urlparse(cleaned_url)
-        domain = parsed.netloc.lower()
+        domain = extract_domain(url)
+        for allowed in settings.url_filter.allowed_domains:
+            if domain == allowed or domain == f"www.{allowed}":
+                return True
         
-        # Remove www.
-        if domain.startswith('www.'):
-            domain = domain[4:]
+        logger.debug(f"Domain '{domain}' not in allowed list")
+        return False
         
-        # Normalize by domain
-        if domain in ['youtube.com', 'youtu.be']:
-            return normalize_youtube_url(cleaned_url)
+    except Exception as e:
+        logger.warning(f"Failed to check domain for {url}: {e}")
+        return False
+
+
+def is_url_allowed(url: str) -> bool:
+    """
+    Check if URL passes all filters.
+    
+    Currently checks:
+    - Domain whitelist (is_domain_allowed)
+    """
+    return is_domain_allowed(url)
+
+
+# ============================================
+# URL Validation (HEAD request)
+# ============================================
+
+async def validate_url(url: str) -> tuple[bool, Optional[str]]:
+    """
+    Validate URL by making a HEAD request.
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if not settings.url_filter.validation:
+        return True, None
+    
+    try:
+        timeout = aiohttp.ClientTimeout(total=settings.url_filter.validation_timeout)
+        headers = {
+            'User-Agent': settings.url_filter.validation_user_agent,
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
         
-        # Default: return cleaned URL
-        return cleaned_url
-        
-    except Exception:
-        return cleaned_url
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            try:
+                async with session.head(url, headers=headers, allow_redirects=True) as response:
+                    if response.status < 400:
+                        return True, None
+                    
+                    # Some servers block HEAD, try GET with range
+                    if response.status in [403, 405, 501]:
+                        headers['Range'] = 'bytes=0-0'
+                        async with session.get(url, headers=headers, allow_redirects=True) as get_response:
+                            if get_response.status < 400:
+                                return True, None
+                    
+                    return False, f"HTTP {response.status}"
+                    
+            except aiohttp.ClientError as e:
+                return False, f"Connection error: {str(e)}"
+            except asyncio.TimeoutError:
+                return False, "Connection timeout"
+                
+    except Exception as e:
+        logger.warning(f"URL validation error for {url}: {e}")
+        return False, f"Validation error: {str(e)}"
+
+
+async def process_url(url: str) -> tuple[Optional[str], Optional[str]]:
+    """
+    Full URL processing pipeline:
+    1. Normalize
+    2. Filter (allowed domains)
+    3. Validate (HEAD request)
+    
+    Returns:
+        (processed_url, error_message)
+    """
+    # 1. Normalize
+    normalized = normalize_video_url(url)
+    if not normalized:
+        return None, "Invalid URL format"
+    
+    # 2. Filter
+    if not is_url_allowed(normalized):
+        allowed_domains = settings.url_filter.allowed_domains
+        if allowed_domains:
+            return None, f"Domain not allowed. Allowed: {', '.join(allowed_domains)}"
+        return None, "Domain not allowed"
+    
+    # 3. Validate
+    valid, error = await validate_url(normalized)
+    if not valid:
+        return None, f"URL validation failed: {error}"
+    
+    return normalized, None
 
 
 # ============================================
@@ -306,15 +348,7 @@ def normalize_video_url(url: str) -> Optional[str]:
 # ============================================
 
 def check_video_file_integrity(file_path: Path) -> bool:
-    """
-    Simple file integrity check.
-    
-    Args:
-        file_path: Path to video file
-        
-    Returns:
-        True if file appears valid
-    """
+    """Simple file integrity check."""
     try:
         if not file_path.exists():
             return False
@@ -323,22 +357,17 @@ def check_video_file_integrity(file_path: Path) -> bool:
         if file_size == 0:
             return False
         
-        # Minimum size for video/audio
         if file_size < 1024 * 10:  # 10KB
             return False
         
-        # Try to read file header
         with open(file_path, 'rb') as f:
             header = f.read(1024)
             if len(header) == 0:
                 return False
-            
-            # Check file is not all zeros
             if all(b == 0 for b in header[:100]):
                 return False
         
         return True
-        
     except Exception:
         return False
 
@@ -347,18 +376,8 @@ async def check_video_file_integrity_extended(
     file_path: Path, 
     expected_size: Optional[int] = None
 ) -> Dict[str, Any]:
-    """
-    Extended file integrity check with ffprobe support.
-    
-    Args:
-        file_path: Path to file
-        expected_size: Expected file size in bytes (optional)
-    
-    Returns:
-        Dict with validation results
-    """
+    """Extended file integrity check with ffprobe support."""
     try:
-        # 1. Check file exists
         if not file_path.exists():
             return {
                 'valid': False,
@@ -369,7 +388,6 @@ async def check_video_file_integrity_extended(
                 'duration': None
             }
         
-        # 2. Check file size
         file_size = file_path.stat().st_size
         
         if file_size == 0:
@@ -382,8 +400,7 @@ async def check_video_file_integrity_extended(
                 'duration': None
             }
         
-        # 3. Minimum size check
-        MIN_SIZE = 1024 * 10  # 10KB
+        MIN_SIZE = 1024 * 10
         if file_size < MIN_SIZE:
             return {
                 'valid': False,
@@ -394,7 +411,6 @@ async def check_video_file_integrity_extended(
                 'duration': None
             }
         
-        # 4. Expected size check (if provided)
         if expected_size and abs(file_size - expected_size) > (expected_size * 0.1):
             return {
                 'valid': False,
@@ -405,7 +421,6 @@ async def check_video_file_integrity_extended(
                 'duration': None
             }
         
-        # 5. Quick read test
         try:
             with open(file_path, 'rb') as f:
                 header = f.read(1024)
@@ -419,7 +434,6 @@ async def check_video_file_integrity_extended(
                         'duration': None
                     }
                 
-                # Check for all-zero file
                 if all(b == 0 for b in header[:100]):
                     return {
                         'valid': False,
@@ -429,7 +443,6 @@ async def check_video_file_integrity_extended(
                         'has_audio_stream': False,
                         'duration': None
                     }
-                
         except Exception as e:
             return {
                 'valid': False,
@@ -440,7 +453,6 @@ async def check_video_file_integrity_extended(
                 'duration': None
             }
         
-        # 6. ffprobe check (if available)
         ffprobe_result = await _check_with_ffprobe(file_path)
         
         if ffprobe_result['valid']:
@@ -453,10 +465,8 @@ async def check_video_file_integrity_extended(
                 'duration': ffprobe_result.get('duration')
             }
         
-        # 7. Basic format checks without ffprobe
         extension = file_path.suffix.lower()
         
-        # MP4 files need 'ftyp' atom
         if extension in ['.mp4', '.m4a']:
             if b'ftyp' not in header:
                 return {
@@ -468,7 +478,6 @@ async def check_video_file_integrity_extended(
                     'duration': None
                 }
         
-        # File passes basic checks
         return {
             'valid': True,
             'reason': None,
@@ -491,16 +500,11 @@ async def check_video_file_integrity_extended(
 
 
 async def _check_with_ffprobe(file_path: Path) -> Dict[str, Any]:
-    """
-    Check file with ffprobe for detailed validation.
-    """
+    """Check file with ffprobe for detailed validation."""
     try:
-        # Check if ffprobe is available
         if not await check_tool('ffprobe', '-version'):
-            logger.debug("ffprobe not available")
-            return {'valid': True}  # Assume valid if ffprobe missing
+            return {'valid': True}
         
-        # Run ffprobe
         process = await asyncio.create_subprocess_exec(
             'ffprobe',
             '-v', 'error',
@@ -516,16 +520,10 @@ async def _check_with_ffprobe(file_path: Path) -> Dict[str, Any]:
         
         if process.returncode != 0:
             error_msg = stderr.decode('utf-8', errors='ignore').strip()
-            
-            # Ignore non-critical errors
             if "moov atom not found" in error_msg:
-                logger.warning(f"ffprobe warning for {file_path}: moov atom not found")
                 return {'valid': True, 'has_video_stream': True, 'has_audio_stream': True}
-            
-            logger.error(f"ffprobe error for {file_path}: {error_msg}")
             return {'valid': False}
         
-        # Parse JSON output
         try:
             probe_data = json.loads(stdout.decode('utf-8', errors='ignore'))
             
@@ -533,7 +531,6 @@ async def _check_with_ffprobe(file_path: Path) -> Dict[str, Any]:
             has_audio_stream = False
             duration = None
             
-            # Check streams
             if 'streams' in probe_data:
                 for stream in probe_data['streams']:
                     if stream.get('codec_type') == 'video':
@@ -541,14 +538,12 @@ async def _check_with_ffprobe(file_path: Path) -> Dict[str, Any]:
                     elif stream.get('codec_type') == 'audio':
                         has_audio_stream = True
             
-            # Get duration
             if 'format' in probe_data and 'duration' in probe_data['format']:
                 try:
                     duration = float(probe_data['format']['duration'])
                 except (ValueError, TypeError):
                     pass
             
-            # Audio files need audio stream
             if file_path.suffix.lower() in ['.mp3', '.m4a', '.aac', '.flac', '.wav']:
                 if has_audio_stream:
                     return {
@@ -557,10 +552,8 @@ async def _check_with_ffprobe(file_path: Path) -> Dict[str, Any]:
                         'has_audio_stream': has_audio_stream,
                         'duration': duration
                     }
-                else:
-                    return {'valid': False}
+                return {'valid': False}
             
-            # Video files need at least one stream
             if has_video_stream or has_audio_stream:
                 return {
                     'valid': True,
@@ -568,16 +561,14 @@ async def _check_with_ffprobe(file_path: Path) -> Dict[str, Any]:
                     'has_audio_stream': has_audio_stream,
                     'duration': duration
                 }
-            else:
-                return {'valid': False}
-                
-        except json.JSONDecodeError as e:
-            logger.error(f"ffprobe JSON parse error: {e}")
-            return {'valid': True}  # Assume valid on parse error
+            return {'valid': False}
+            
+        except json.JSONDecodeError:
+            return {'valid': True}
             
     except Exception as e:
         logger.error(f"ffprobe execution error: {e}")
-        return {'valid': True}  # Assume valid on error
+        return {'valid': True}
 
 
 # ============================================
@@ -585,16 +576,7 @@ async def _check_with_ffprobe(file_path: Path) -> Dict[str, Any]:
 # ============================================
 
 def get_date_sort_key(item: dict, key: str):
-    """
-    Get sortable timestamp from dict item with date field.
-    
-    Args:
-        item: Dictionary containing date field
-        key: Key name for date field
-        
-    Returns:
-        Unix timestamp or 0 if invalid
-    """
+    """Get sortable timestamp from dict item with date field."""
     val = item.get(key)
     if not val:
         return 0
@@ -604,14 +586,12 @@ def get_date_sort_key(item: dict, key: str):
     
     if isinstance(val, str):
         try:
-            # Try different date formats
             formats = [
                 "%Y-%m-%d %H:%M:%S.%f",
                 "%Y-%m-%d %H:%M:%S",
                 "%Y-%m-%dT%H:%M:%S.%f",
                 "%Y-%m-%dT%H:%M:%S",
             ]
-            
             for fmt in formats:
                 try:
                     dt = datetime.strptime(val, fmt)
@@ -630,23 +610,11 @@ def get_date_sort_key(item: dict, key: str):
 # ============================================
 
 async def check_tool(command: str, *args) -> bool:
-    """
-    Check if a system tool is available in PATH.
-    
-    Args:
-        command: Command name (e.g., 'ffmpeg')
-        *args: Arguments to pass (e.g., '--version')
-    
-    Returns:
-        True if tool exists and returns exit code 0, False otherwise
-    """
-    # First check if command exists in PATH
+    """Check if a system tool is available in PATH."""
     if not shutil.which(command):
-        logger.debug(f"Tool '{command}' not found in PATH")
         return False
     
     try:
-        # Try to run the command with given args
         cmd = [command] + list(args)
         process = await asyncio.create_subprocess_exec(
             *cmd,
@@ -654,9 +622,30 @@ async def check_tool(command: str, *args) -> bool:
             stderr=asyncio.subprocess.PIPE
         )
         await process.communicate()
-        
         return process.returncode == 0
-        
-    except Exception as e:
-        logger.debug(f"Failed to run '{command}': {e}")
+    except Exception:
         return False
+
+
+# ============================================
+# Exports
+# ============================================
+
+__all__ = [
+    'normalize_title',
+    'extract_domain',
+    'generate_video_hash',
+    'get_download_config_for_url',
+    'format_file_size',
+    'normalize_video_url',
+    'normalize_url_by_rules',
+    'clean_and_validate_url',
+    'is_domain_allowed',
+    'is_url_allowed',
+    'validate_url',
+    'process_url',
+    'check_video_file_integrity',
+    'check_video_file_integrity_extended',
+    'get_date_sort_key',
+    'check_tool',
+]

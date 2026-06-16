@@ -2,7 +2,7 @@
 Загрузка и управление конфигурацией приложения
 """
 from pydantic import BaseModel, Field
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 import yaml
 import os
 import argparse
@@ -105,12 +105,23 @@ class SourceConfig(BaseModel):
     format: str = Field(default="best", description="Формат видео (yt-dlp format)")
     extract_audio: bool = Field(default=False, description="Извлекать только аудио")
 
+class UrlFilterConfig(BaseModel):
+    """URL filtering and normalization configuration"""
+    allowed_domains: List[str] = Field(default_factory=list)
+    normalization_rules: Dict[str, Dict[str, str]] = Field(default_factory=dict)
+    validation: bool = Field(default=True)
+    validation_timeout: int = Field(default=5, ge=1, le=30)
+    validation_user_agent: str = Field(
+        default="Mozilla/5.0 (compatible; VideoServer/2.0)"
+    )
+
 class AppConfig(BaseModel):
     """Основная конфигурация приложения"""
     storage: StorageConfig
     download: DownloadConfig
     server: ServerConfig
     sources: Dict[str, SourceConfig]
+    url_filter: UrlFilterConfig = Field(default_factory=UrlFilterConfig)
     
     class Config:
         arbitrary_types_allowed = True
@@ -147,7 +158,8 @@ def load_config(config_path: Optional[str] = None) -> AppConfig:
         storage=StorageConfig(**config_data.get('storage', {})),
         download=DownloadConfig(**config_data.get('download', {})),
         server=ServerConfig(**config_data.get('server', {})),
-        sources={}
+        url_filter=UrlFilterConfig(**config_data.get('url_filter', {})),
+        sources={},
     )
     
     # Обрабатываем источники

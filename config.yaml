@@ -31,3 +31,40 @@ sources:
   default:
     format: "best"
     extract_audio: false
+
+# URL filtering configuration
+url_filter:
+  # Allowed domains (without www.)
+  # If empty, all domains are allowed
+  allowed_domains:
+    - youtube.com
+    - youtu.be
+    # - vimeo.com
+    # - dailymotion.com
+  
+  # Normalization rules for specific domains
+  normalization_rules:
+    youtube.com:
+      # Remove all params except these (comma-separated string)
+      keep_params: "v"
+      # Always use this domain
+      normalize_to: "https://www.youtube.com/watch?v={video_id}"
+      # Extract video_id from URL
+      video_id_pattern: "(?:v=|\\/)([a-zA-Z0-9_-]{11})"
+    
+    youtu.be:
+      normalize_to: "https://www.youtube.com/watch?v={video_id}"
+      video_id_pattern: "^https?://youtu\\.be/([a-zA-Z0-9_-]{11})"
+    
+    vimeo.com:
+      normalize_to: "https://vimeo.com/{video_id}"
+      video_id_pattern: "vimeo\\.com/(\\d+)"
+  
+  # Enable URL validation (HEAD request)
+  validation: true
+  
+  # Timeout for URL validation in seconds
+  validation_timeout: 5
+  
+  # User-Agent for validation requests
+  validation_user_agent: "Mozilla/5.0 (compatible; VideoServer/2.0)"

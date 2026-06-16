@@ -19,7 +19,7 @@ from app.utils import (
     generate_video_hash, 
     get_download_config_for_url, 
     normalize_title, 
-    normalize_video_url, 
+    process_url, 
     check_video_file_integrity, 
     check_video_file_integrity_extended, 
     get_date_sort_key
@@ -164,12 +164,13 @@ async def request_video(url: str = Query(..., description="Video URL")):
     returns stream URL. If not, adds to download queue.
     """
     try:
-        # Normalize URL
-        normalized_url = normalize_video_url(url)
-        if not normalized_url:
-            raise HTTPException(status_code=400, detail="Invalid URL")
+        # Full URL processing: normalize → filter → validate
+        processed_url, error = await process_url(url)
         
-        url = normalized_url
+        if not processed_url:
+            raise HTTPException(status_code=400, detail=error or "Invalid URL")
+        
+        url = processed_url
         
         # Get format config and generate hash
         format_spec, _ = get_download_config_for_url(url)
