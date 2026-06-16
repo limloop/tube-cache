@@ -1,94 +1,110 @@
 """
-Упрощённый и надёжный загрузчик
-Отвечает ТОЛЬКО за загрузку и свои временные файлы
+Video downloader using yt-dlp.
+
+Handles downloading videos from supported sources.
+Saves files to subdirectory structure: data/videos/{hash[:4]}/{hash}.{ext}
 """
+
 import asyncio
-import os
-import yt_dlp
-import time
 import shutil
 import subprocess
-from typing import Dict, Any, Optional
 from pathlib import Path
+from typing import Dict, Any, Optional
+
+import yt_dlp
 
 from app.config import settings
+from app.file_utils import ensure_video_subdir
 from app.utils import get_download_config_for_url, normalize_title
 from app import logger
 
+
 class DownloadError(Exception):
+    """Download error exception."""
     pass
 
+
 class VideoDownloader:
-    """Загрузчик видео - отвечает только за загрузку"""
+    """Video downloader using yt-dlp."""
     
     def __init__(self):
         self.videos_path = Path(settings.storage.videos_path)
         self.temp_path = Path(settings.storage.temp_path)
         self.opts = settings.download.yt_dlp
         
-        # Создаём директории
+        # Create directories
         self.videos_path.mkdir(parents=True, exist_ok=True)
         self.temp_path.mkdir(parents=True, exist_ok=True)
     
     async def download(self, url: str, video_hash: str) -> Dict[str, Any]:
         """
-        Загружает одно видео
-        Отвечает ТОЛЬКО за загрузку и свои временные файлы
+        Download a video.
+        
+        Args:
+            url: Video URL
+            video_hash: 64-character hash
+            
+        Returns:
+            Dict with download results
+            
+        Raises:
+            DownloadError: On download failure
         """
-        # ОЧИСТКА: Удаляем ВСЕ временные файлы этого видео перед началом
+        # Clean all temporary files before starting
         await self._cleanup_all_temp_files(video_hash)
         
         loop = asyncio.get_event_loop()
         
         try:
-            # Получаем конфигурацию
+            # Get format configuration
             format_spec, extract_audio = get_download_config_for_url(url)
             
-            # Создаём опции
+            # Build yt-dlp options
             ydl_opts = self._build_ydl_opts(format_spec, extract_audio, video_hash)
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Получаем информацию
+                # Extract video info
                 info = await loop.run_in_executor(None, ydl.extract_info, url, False)
                 
                 if not info:
-                    raise DownloadError("Не удалось получить информацию о видео")
+                    raise DownloadError("Failed to get video info")
                 
-                # Определяем расширение
+                # Determine extension
                 ext = 'mp3' if extract_audio else info.get('ext', 'mp4')
                 
-                # Загружаем
-                logger.info(f"Загрузка {video_hash[:12]}...")
+                # Download video
+                logger.info(f"Downloading {video_hash[:12]}...")
                 await loop.run_in_executor(None, ydl.download, [url])
                 
-                # Даём время на завершение
+                # Wait for file to be written
                 await asyncio.sleep(2)
                 
-                # Ищем загруженный файл
+                # Find downloaded file
                 downloaded_file = await self._find_downloaded_file(video_hash, ext)
                 if not downloaded_file:
-                    raise DownloadError("Файл не найден после загрузки")
+                    raise DownloadError("File not found after download")
                 
-                # Проверяем файл
+                # Validate file
                 await self._validate_file(downloaded_file, extract_audio)
                 
-                # Путь к финальному файлу
-                final_path = self.videos_path / f"{video_hash}.{ext}"
+                # Ensure subdirectory exists
+                subdir_path = ensure_video_subdir(video_hash)
+                final_path = subdir_path / f"{video_hash}.{ext}"
                 
-                # Удаляем старый финальный файл если есть
+                # Remove old file if exists
                 final_path.unlink(missing_ok=True)
                 
-                # Перемещаем
+                # Move to final location
                 shutil.move(str(downloaded_file), str(final_path))
                 
                 if not final_path.exists():
-                    raise DownloadError("Файл не перемещён в финальную папку")
+                    raise DownloadError("File not moved to final location")
                 
-                # Проверяем после перемещения
+                # Quick check after move
                 if not await self._quick_check_file(final_path):
-                    raise DownloadError("Файл повреждён после перемещения")
+                    raise DownloadError("File corrupted after move")
                 
-                # Возвращаем результат
+                # Return result
                 return {
                     'file_path': str(final_path),
                     'title': normalize_title(info.get('title', '')),
@@ -100,50 +116,40 @@ class VideoDownloader:
                 }
                 
         except yt_dlp.utils.DownloadError as e:
-            # Всегда очищаем временные файлы при ошибке
             await self._cleanup_all_temp_files(video_hash)
             
             error_msg = str(e).lower()
             
-            # Обработка 403 Forbidden
+            # Handle specific errors
             if "http error 403" in error_msg or "forbidden" in error_msg:
-                raise DownloadError(f"403 Forbidden: Доступ к видео запрещён. Возможно, видео приватное или заблокировано.")
-            # Обработка 416 Range Not Satisfiable
+                raise DownloadError("403 Forbidden: Access denied. Video may be private or blocked.")
             elif "http error 416" in error_msg or "range not satisfiable" in error_msg:
-                raise DownloadError(f"HTTP 416: Ошибка диапазона - {e}")
-            # Обработка 404 Not Found
+                raise DownloadError(f"HTTP 416: Range error - {e}")
             elif "http error 404" in error_msg or "not found" in error_msg:
-                raise DownloadError(f"404 Not Found: Видео не найдено или было удалено.")
-            # Обработка 429 Too Many Requests
+                raise DownloadError("404 Not Found: Video was removed or doesn't exist.")
             elif "http error 429" in error_msg or "too many requests" in error_msg:
-                raise DownloadError(f"429 Too Many Requests: Слишком много запросов. Попробуйте позже.")
-            # Обработка недоступного контента
+                raise DownloadError("429 Too Many Requests: Please try again later.")
             elif "unavailable" in error_msg:
-                raise DownloadError(f"Видео недоступно: {e}")
-            # Остальные ошибки
+                raise DownloadError(f"Video unavailable: {e}")
             else:
-                raise DownloadError(f"Ошибка загрузки: {e}")
+                raise DownloadError(f"Download error: {e}")
 
         except Exception as e:
-            # Всегда очищаем временные файлы при ошибке
             await self._cleanup_all_temp_files(video_hash)
-            raise DownloadError(f"Ошибка загрузки: {e}")
+            raise DownloadError(f"Download error: {e}")
     
     async def _cleanup_all_temp_files(self, video_hash: str):
-        """
-        Очищает ВСЕ временные файлы для этого видео
-        Вызывается ПЕРЕД началом загрузки и ПРИ ошибках
-        """
+        """Clean all temporary files for this video."""
         try:
             for file in self.temp_path.glob(f"*{video_hash}*"):
                 try:
                     if file.exists():
                         file.unlink()
-                        logger.debug(f"Очистка: удалён {file.name}")
+                        logger.debug(f"Cleaned: {file.name}")
                 except Exception as e:
-                    logger.debug(f"Не удалось удалить {file}: {e}")
+                    logger.debug(f"Failed to delete {file}: {e}")
         except Exception as e:
-            logger.warning(f"Ошибка очистки временных файлов {video_hash}: {e}")
+            logger.warning(f"Cleanup error for {video_hash}: {e}")
     
     def _build_ydl_opts(
         self, 
@@ -151,13 +157,12 @@ class VideoDownloader:
         extract_audio: bool, 
         video_hash: str
     ) -> Dict[str, Any]:
-        """Создаёт опции для yt-dlp с учётом конфигурации"""
+        """Build yt-dlp options."""
         
-        # Базовые настройки
         temp_filename = f"{video_hash}_temp.%(ext)s"
         output_template = str(self.temp_path / temp_filename)
         
-        # Стандартные опции по умолчанию
+        # Default options
         default_opts = {
             'format': format_spec,
             'outtmpl': output_template,
@@ -173,23 +178,22 @@ class VideoDownloader:
             'fixup': 'detect_or_warn'
         }
         
-        # Объединяем с пользовательскими настройками из конфига
+        # Merge with user options
         if self.opts:
             user_opts = self.opts.copy()
             
-            # Специальная обработка http_headers (объединение, а не перезапись)
+            # Merge http_headers instead of overwriting
             if 'http_headers' in user_opts and 'http_headers' in default_opts:
                 default_opts['http_headers'].update(user_opts.pop('http_headers'))
             
             default_opts.update(user_opts)
         
-        # Настройки для аудио или видео
+        # Audio-specific options
         if extract_audio:
             default_opts.update({
                 'format': 'bestaudio/best'
             })
             
-            # Если пользователь указал свои postprocessors для аудио
             if self.opts and 'postprocessors' in self.opts:
                 default_opts['postprocessors'] = self.opts['postprocessors']
         else:
@@ -199,13 +203,13 @@ class VideoDownloader:
         return default_opts
     
     async def _find_downloaded_file(self, video_hash: str, expected_ext: str) -> Optional[Path]:
-        """Ищет загруженный файл"""
-        # Ищем по шаблону
+        """Find downloaded file."""
+        # Search by pattern
         for file in self.temp_path.glob(f"{video_hash}_temp*.{expected_ext}"):
             if file.exists() and file.stat().st_size > 0 and not file.name.endswith('.part'):
                 return file
         
-        # Ищем любой файл с этим хешем
+        # Search any file with this hash
         for file in self.temp_path.glob(f"*{video_hash}*"):
             if (file.exists() and file.stat().st_size > 0 and 
                 not file.name.endswith('.part') and 
@@ -215,35 +219,33 @@ class VideoDownloader:
         return None
     
     async def _validate_file(self, file_path: Path, is_audio: bool):
-        """Проверяет загруженный файл"""
-        # Проверка размера
-        if file_path.stat().st_size < 1024 * 10:  # Минимум 10KB
-            raise DownloadError("Файл слишком мал")
+        """Validate downloaded file."""
+        # Check size
+        if file_path.stat().st_size < 1024 * 10:  # 10KB minimum
+            raise DownloadError("File too small")
         
-        # Быстрая проверка через file команду если доступна
+        # Check with file command if available
         if await self._has_file_command():
             if not await self._check_with_file(file_path, is_audio):
-                raise DownloadError("Файл имеет неверный формат")
+                raise DownloadError("Invalid file format")
     
     async def _quick_check_file(self, file_path: Path) -> bool:
-        """Быстрая проверка файла"""
+        """Quick file check."""
         try:
-            # Проверяем существование и размер
             if not file_path.exists():
                 return False
             
             if file_path.stat().st_size == 0:
                 return False
             
-            # Пробуем прочитать начало и конец
+            # Try to read beginning and end
             with open(file_path, 'rb') as f:
-                # Начало
                 f.seek(0)
                 header = f.read(100)
                 if len(header) == 0:
                     return False
                 
-                # Конец (если файл не слишком большой)
+                # Check end for small files
                 if file_path.stat().st_size < 10 * 1024 * 1024:  # 10MB
                     f.seek(-100, 2)
                     footer = f.read(100)
@@ -256,7 +258,7 @@ class VideoDownloader:
             return False
     
     async def _has_file_command(self) -> bool:
-        """Проверяет наличие команды file"""
+        """Check if 'file' command is available."""
         try:
             result = await asyncio.create_subprocess_exec(
                 'file', '--version',
@@ -269,7 +271,7 @@ class VideoDownloader:
             return False
     
     async def _check_with_file(self, file_path: Path, is_audio: bool) -> bool:
-        """Проверяет файл с помощью команды file"""
+        """Check file with 'file' command."""
         try:
             result = await asyncio.create_subprocess_exec(
                 'file', '-b', '--mime-type', str(file_path),
@@ -286,4 +288,4 @@ class VideoDownloader:
                 return 'video' in mime_type or 'mp4' in mime_type
                 
         except Exception:
-            return True  # Если команда не работает, считаем файл валидным
+            return True  # Assume valid if file command fails

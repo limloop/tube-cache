@@ -1,3 +1,13 @@
+"""
+Storage management for video files.
+
+Handles:
+- Storage monitoring and cleanup
+- File integrity checks
+- Video file discovery with auto-migration
+- Storage statistics
+"""
+
 import os
 import asyncio
 import time
@@ -5,60 +15,60 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+
 from app.config import settings
 from app.database import db
+from app.file_utils import find_video_file, get_all_video_files
 from app.utils import check_video_file_integrity
 from app import logger
 
+
 class StorageManager:
     """
-    Управление хранилищем видеофайлов и их обслуживанием.
+    Storage management for video files.
     
-    Основные функции:
-    - Мониторинг заполненности хранилища
-    - Автоматическая очистка старых видео при нехватке места
-    - Проверка целостности видеофайлов
-    - Очистка старых логов
+    Features:
+    - Storage usage monitoring
+    - Automatic cleanup of old videos when storage is full
+    - Video file integrity checking
+    - Old log file cleanup
     """
     
-    # Поддерживаемые видеоформаты для поиска файлов
+    # Supported video formats for file discovery
     VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mkv', '.avi', '.mov', '.flv', '.wmv']
     
     def __init__(self):
-        """Инициализация менеджера хранилища."""
+        """Initialize storage manager."""
         self.videos_path = Path(settings.storage.videos_path)
         self.max_size_bytes = settings.storage.max_size_gb * (1024 ** 3)
         
-        # Настройки из конфигурации
-        self.monitoring_interval = settings.storage.monitoring_interval  # секунды
-        self.storage_cleanup_threshold = settings.storage.cleanup_threshold  # процент заполнения
-        self.target_free_space = settings.storage.target_free_space  # процент свободного места после очистки
+        # Configuration
+        self.monitoring_interval = settings.storage.monitoring_interval
+        self.storage_cleanup_threshold = settings.storage.cleanup_threshold
+        self.target_free_space = settings.storage.target_free_space
         self.log_retention_days = settings.storage.log_retention_days
         self.log_check_interval = settings.storage.log_check_interval
-        self.integrity_check_interval = settings.storage.integrity_check_interval  # секунды
+        self.integrity_check_interval = settings.storage.integrity_check_interval
         
-        # Время последних операций
+        # State
         self._last_log_cleanup = 0
         self._last_integrity_check = 0
-        
-        # Флаги выполняющихся операций (защита от повторного запуска)
         self._integrity_check_running = False
         self._cleanup_running = False
-        
         self._monitor_task = None
         self._is_monitoring = False
     
     async def start_monitoring(self):
-        """Запуск фонового мониторинга хранилища."""
+        """Start background storage monitoring."""
         if self._is_monitoring:
             return
             
         self._is_monitoring = True
         self._monitor_task = asyncio.create_task(self._monitor_loop())
-        logger.info("Мониторинг хранилища запущен")
+        logger.info("Storage monitoring started")
     
     async def stop_monitoring(self):
-        """Остановка фонового мониторинга."""
+        """Stop background storage monitoring."""
         self._is_monitoring = False
         
         if self._monitor_task:
@@ -68,18 +78,11 @@ class StorageManager:
             except asyncio.CancelledError:
                 pass
             
-        logger.info("Мониторинг хранилища остановлен")
+        logger.info("Storage monitoring stopped")
     
     async def _monitor_loop(self):
-        """
-        Основной цикл мониторинга.
-        
-        Выполняет периодические проверки:
-        1. Заполненность хранилища
-        2. Очистку старых логов (раз в сутки)
-        3. Проверку целостности файлов (раз в указанный интервал)
-        """
-        logger.debug("Запущен цикл мониторинга хранилища")
+        """Main monitoring loop."""
+        logger.debug("Storage monitoring loop started")
         
         try:
             while self._is_monitoring:
@@ -87,35 +90,40 @@ class StorageManager:
                 await self._perform_monitoring_checks()
                 
         except asyncio.CancelledError:
-            logger.debug("Цикл мониторинга остановлен")
+            logger.debug("Storage monitoring loop stopped")
         except Exception as e:
-            logger.error(f"Ошибка в цикле мониторинга: {e}")
+            logger.error(f"Storage monitoring error: {e}")
         finally:
             self._is_monitoring = False
     
     async def _perform_monitoring_checks(self):
-        """Выполнение всех проверок состояния хранилища."""
+        """Perform all monitoring checks."""
         current_time = time.time()
         
-        # 1. Проверка заполненности хранилища
+        # 1. Check storage usage
         storage_info = await self.get_storage_info()
-        if (storage_info['used_percent'] >= self.storage_cleanup_threshold and not self._cleanup_running):
-            logger.warning(f"Хранилище заполнено на {storage_info['used_percent']}%, запуск очистки")
+        if (storage_info['used_percent'] >= self.storage_cleanup_threshold and 
+            not self._cleanup_running):
+            logger.warning(
+                f"Storage {storage_info['used_percent']:.1f}% full, "
+                "triggering cleanup"
+            )
             asyncio.create_task(self._safe_cleanup_old_videos())
         
-        # 2. Проверка логов - раз в указанный интервал
+        # 2. Check logs
         if current_time - self._last_log_cleanup > self.log_check_interval:
             await self.cleanup_old_logs()
             self._last_log_cleanup = current_time
         
-        # 3. Проверка целостности - раз в указанный интервал
-        if (current_time - self._last_integrity_check > self.integrity_check_interval and not self._integrity_check_running):
+        # 3. Check integrity
+        if (current_time - self._last_integrity_check > self.integrity_check_interval and 
+            not self._integrity_check_running):
             asyncio.create_task(self._safe_check_video_integrity())
     
     async def _safe_cleanup_old_videos(self):
-        """Безопасная очистка видео с защитой от повторного запуска."""
+        """Safely cleanup old videos (prevents concurrent runs)."""
         if self._cleanup_running:
-            logger.debug("Очистка видео уже выполняется, пропускаем")
+            logger.debug("Cleanup already running, skipping")
             return
             
         self._cleanup_running = True
@@ -125,9 +133,9 @@ class StorageManager:
             self._cleanup_running = False
     
     async def _safe_check_video_integrity(self):
-        """Безопасная проверка целостности с защитой от повторного запуска."""
+        """Safely check integrity (prevents concurrent runs)."""
         if self._integrity_check_running:
-            logger.debug("Проверка целостности уже выполняется, пропускаем")
+            logger.debug("Integrity check already running, skipping")
             return
             
         self._integrity_check_running = True
@@ -139,9 +147,10 @@ class StorageManager:
 
     async def cleanup_old_videos(self) -> List[str]:
         """
-        Очистка самых старых видеофайлов для освобождения места.
+        Remove oldest videos to free up storage space.
         
-        Возвращает список хешей удаленных видео.
+        Returns:
+            List of deleted video hashes
         """
         if self._cleanup_running:
             return []
@@ -150,18 +159,18 @@ class StorageManager:
         deleted_hashes = []
         
         try:
-            # Получаем видео отсортированные по времени последнего доступа
+            # Get all ready videos sorted by last access (oldest first)
             videos = await db.get_all_ready_videos()
             videos.sort(key=lambda x: x.get('last_accessed', 0) or 0)
             
             current_size = sum(v.get('file_size', 0) for v in videos)
             target_size = self.max_size_bytes * (1 - self.target_free_space / 100)
             
-            # Если места достаточно - выходим
+            # Check if cleanup is needed
             if current_size <= target_size:
                 return deleted_hashes
             
-            # Удаляем старые видео пока не освободим достаточно места
+            # Delete oldest videos until target is reached
             for video in videos:
                 if current_size <= target_size:
                     break
@@ -172,7 +181,9 @@ class StorageManager:
                 if not file_size:
                     continue
                 
-                file_path = self._find_video_file(video_hash)
+                # Find file using file_utils (handles both old and new structure)
+                file_path = await self.find_video_path(video_hash)
+                
                 if file_path and file_path.exists():
                     try:
                         file_path.unlink()
@@ -181,16 +192,16 @@ class StorageManager:
                         current_size -= file_size
                         deleted_hashes.append(video_hash)
                         
-                        logger.info(f"Удалено старое видео: {video_hash[:12]} ({file_size:,} bytes)")
+                        logger.info(f"Deleted old video: {video_hash[:12]} ({file_size:,} bytes)")
                         
                     except Exception as e:
-                        logger.error(f"Ошибка удаления видео {video_hash[:12]}: {e}")
+                        logger.error(f"Failed to delete video {video_hash[:12]}: {e}")
             
             if deleted_hashes:
-                logger.info(f"Очистка завершена: удалено {len(deleted_hashes)} видео")
+                logger.info(f"Cleanup complete: removed {len(deleted_hashes)} videos")
                 
         except Exception as e:
-            logger.error(f"Ошибка очистки видео: {e}")
+            logger.error(f"Cleanup error: {e}")
         finally:
             self._cleanup_running = False
         
@@ -198,10 +209,10 @@ class StorageManager:
     
     async def cleanup_old_logs(self) -> List[str]:
         """
-        Удаление лог-файлов старше указанного количества дней.
+        Delete log files older than retention period.
         
-        Анализирует дату из имени файла (формат: имя_ГГГГ-ММ-ДД.log)
-        или использует дату изменения файла.
+        Returns:
+            List of deleted file names
         """
         deleted_files = []
         logs_dir = Path(settings.storage.logs_path)
@@ -216,7 +227,6 @@ class StorageManager:
                 continue
             
             try:
-                # Пытаемся определить дату файла
                 file_date = self._get_file_date(log_file)
                 
                 if file_date.timestamp() < cutoff_date:
@@ -224,34 +234,35 @@ class StorageManager:
                     deleted_files.append(log_file.name)
                     
             except Exception as e:
-                logger.warning(f"Не удалось обработать файл {log_file.name}: {e}")
+                logger.warning(f"Failed to process {log_file.name}: {e}")
         
         if deleted_files:
-            logger.info(f"Очищено логов: {len(deleted_files)} файлов")
+            logger.info(f"Cleaned {len(deleted_files)} log files")
         
         return deleted_files
     
     def _get_file_date(self, file_path: Path) -> datetime:
         """
-        Определяет дату файла.
+        Determine file date from name or modification time.
         
-        Сначала пытается извлечь дату из имени файла,
-        затем использует дату изменения файла.
+        Tries to extract date from filename (format: name_YYYY-MM-DD.log)
+        Falls back to modification time.
         """
-        # Извлечение даты из имени файла
+        # Try to extract date from filename
         date_match = re.search(r'(\d{4})-(\d{2})-(\d{2})', file_path.stem)
         if date_match:
             year, month, day = map(int, date_match.groups())
             return datetime(year, month, day)
         
-        # Использование даты изменения файла
+        # Fallback to modification time
         return datetime.fromtimestamp(file_path.stat().st_mtime)
     
     async def check_all_video_integrity(self) -> List[str]:
         """
-        Проверка целостности всех видеофайлов в хранилище.
+        Check integrity of all video files.
         
-        Возвращает список хешей поврежденных файлов.
+        Returns:
+            List of corrupted video hashes
         """
         damaged_files = []
         start_time = time.time()
@@ -261,68 +272,69 @@ class StorageManager:
             total_videos = len(videos)
             
             if total_videos == 0:
-                logger.debug("Нет видео для проверки целостности")
+                logger.debug("No videos to check")
                 return damaged_files
             
-            logger.info(f"Начинаем проверку целостности {total_videos} видео...")
+            logger.info(f"Starting integrity check: {total_videos} videos...")
             
             for index, video in enumerate(videos, 1):
                 if not self._is_monitoring:
-                    logger.info("Проверка целостности прервана (остановлен мониторинг)")
+                    logger.info("Integrity check interrupted")
                     break
                     
                 video_hash = video['hash']
-                file_path = self._find_video_file(video_hash)
+                file_path = await self.find_video_path(video_hash)
                 
                 if file_path and file_path.exists():
                     try:
                         if not check_video_file_integrity(file_path):
                             damaged_files.append(video_hash)
-                            logger.warning(f"Обнаружен поврежденный файл: {video_hash[:12]}")
+                            logger.warning(f"Corrupted file: {video_hash[:12]}")
                             
-                            # Автоматическое удаление поврежденного файла
+                            # Auto-delete corrupted file
                             file_path.unlink(missing_ok=True)
                             await db.mark_video_deleted(video_hash)
                             
                     except Exception as e:
-                        logger.error(f"Ошибка проверки файла {video_hash[:12]}: {e}")
+                        logger.error(f"Failed to check {video_hash[:12]}: {e}")
                 
-                # Логируем прогресс каждые 10% или каждые 10 файлов
+                # Log progress
                 if index % max(10, total_videos // 10) == 0:
                     progress = (index / total_videos) * 100
-                    logger.debug(f"Прогресс проверки целостности: {progress:.0f}% ({index}/{total_videos})")
+                    logger.debug(f"Progress: {progress:.0f}% ({index}/{total_videos})")
             
-            elapsed_time = time.time() - start_time
+            elapsed = time.time() - start_time
             logger.info(
-                f"Проверка целостности завершена: "
-                f"{total_videos} проверено, {len(damaged_files)} повреждено, "
-                f"время: {elapsed_time:.1f} сек"
+                f"Integrity check complete: {total_videos} checked, "
+                f"{len(damaged_files)} corrupted, {elapsed:.1f}s"
             )
             
         except Exception as e:
-            logger.error(f"Ошибка проверки целостности: {e}")
+            logger.error(f"Integrity check error: {e}")
         
         return damaged_files
     
-    def _find_video_file(self, video_hash: str) -> Optional[Path]:
+    async def find_video_path(self, video_hash: str) -> Optional[Path]:
         """
-        Поиск видеофайла по хешу.
+        Find a video file by hash using file_utils.
         
-        Проверяет файлы с различными расширениями видео.
+        Handles both old (root) and new (subdir) structures.
+        Auto-migrates old files to new structure.
+        
+        Args:
+            video_hash: 64-character hash
+            
+        Returns:
+            Path to video file if found, None otherwise
         """
-        for ext in self.VIDEO_EXTENSIONS:
-            file_path = self.videos_path / f"{video_hash}{ext}"
-            if file_path.exists():
-                return file_path
-        
-        return None
+        return find_video_file(video_hash)
     
     async def get_storage_info(self) -> Dict[str, Any]:
         """
-        Получение текущей статистики хранилища.
+        Get current storage statistics.
         
-        Возвращает словарь с информацией о размере, заполнении
-        и количестве файлов.
+        Returns:
+            Dict with storage usage information
         """
         try:
             stats = await db.get_storage_stats()
@@ -342,11 +354,11 @@ class StorageManager:
             }
             
         except Exception as e:
-            logger.error(f"Ошибка получения статистики хранилища: {e}")
+            logger.error(f"Failed to get storage info: {e}")
             return self._get_empty_storage_info()
     
     def _get_empty_storage_info(self) -> Dict[str, Any]:
-        """Возвращает пустую статистику при ошибке."""
+        """Return empty storage info on error."""
         return {
             'total_size_bytes': 0,
             'max_size_bytes': self.max_size_bytes,
@@ -356,22 +368,10 @@ class StorageManager:
             'free_percent': 100
         }
     
-    async def find_video_path(self, video_hash: str) -> Optional[Path]:
-        """
-        Поиск пути к видеофайлу с проверкой доступности.
-        
-        Возвращает Path если файл существует и доступен для чтения.
-        """
-        file_path = self._find_video_file(video_hash)
-        
-        if file_path and file_path.exists() and os.access(file_path, os.R_OK):
-            return file_path
-        
-        return None
-    
     def is_monitoring_active(self) -> bool:
-        """Проверка активности мониторинга."""
+        """Check if monitoring is active."""
         return self._is_monitoring
 
-# Глобальный экземпляр менеджера хранилища
+
+# Global instance
 storage = StorageManager()
