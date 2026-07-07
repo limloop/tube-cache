@@ -1,3 +1,5 @@
+# app/storage.py
+
 """
 Storage management for video files.
 
@@ -12,7 +14,7 @@ import os
 import asyncio
 import time
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -32,6 +34,7 @@ class StorageManager:
     - Automatic cleanup of old videos when storage is full
     - Video file integrity checking
     - Old log file cleanup
+    - Smart cleanup: prioritizes old + low-view videos
     """
     
     # Supported video formats for file discovery
@@ -145,9 +148,93 @@ class StorageManager:
         finally:
             self._integrity_check_running = False
 
+    def _calculate_video_score(self, video: Dict[str, Any]) -> float:
+        """
+        Calculate cleanup priority score for a video.
+        
+        Lower score = higher priority for deletion.
+        
+        Factors:
+        - Last accessed time (older = lower score)
+        - Access count (fewer views = lower score)
+        - Age (older = lower score)
+        
+        Returns:
+            Float score (lower = better candidate for deletion)
+        """
+        # Get timestamps
+        last_accessed = video.get('last_accessed')
+        created_at = video.get('created_at')
+        access_count = video.get('access_count', 0)
+        
+        now = datetime.now()
+        
+        # Default values if timestamps missing
+        if last_accessed:
+            if isinstance(last_accessed, str):
+                try:
+                    last_accessed = datetime.fromisoformat(last_accessed.replace(' ', 'T'))
+                except:
+                    last_accessed = now
+        else:
+            # If never accessed, use created_at or current time
+            if created_at:
+                if isinstance(created_at, str):
+                    try:
+                        last_accessed = datetime.fromisoformat(created_at.replace(' ', 'T'))
+                    except:
+                        last_accessed = now
+                else:
+                    last_accessed = created_at
+            else:
+                last_accessed = now
+        
+        if created_at:
+            if isinstance(created_at, str):
+                try:
+                    created_at = datetime.fromisoformat(created_at.replace(' ', 'T'))
+                except:
+                    created_at = now
+        else:
+            created_at = now
+        
+        # Calculate days since last access
+        days_since_access = (now - last_accessed).total_seconds() / 86400
+        days_since_created = (now - created_at).total_seconds() / 86400
+        
+        # --- Score calculation ---
+        # 1. Access time factor: older = higher priority (lower score)
+        # Max 100 days, after that no additional penalty
+        access_factor = min(days_since_access, 100) / 100 * 0.6
+        
+        # 2. View count factor: fewer views = higher priority (lower score)
+        # Max 1000 views, after that no benefit
+        view_factor = min(1.0, access_count / 1000) * 0.3
+        
+        # 3. Age factor: older = higher priority (lower score)
+        # Max 365 days
+        age_factor = min(days_since_created, 365) / 365 * 0.1
+        
+        # Combined score (lower = better candidate for deletion)
+        # Invert so that:
+        # - Old, low-view videos get LOW score (high priority for deletion)
+        # - New, high-view videos get HIGH score (low priority for deletion)
+        score = 1.0 - (access_factor * 0.6 + view_factor * 0.3 + age_factor * 0.1)
+        
+        # Add small random factor to avoid always deleting the same videos
+        # when many have similar scores
+        score += (hash(video['hash']) % 1000) / 10000
+        
+        return score
+
     async def cleanup_old_videos(self) -> List[str]:
         """
-        Remove oldest videos to free up storage space.
+        Remove oldest + least viewed videos to free up storage space.
+        
+        Uses smart scoring:
+        - Older videos = higher priority
+        - Fewer views = higher priority
+        - Combines both factors
         
         Returns:
             List of deleted video hashes
@@ -159,47 +246,125 @@ class StorageManager:
         deleted_hashes = []
         
         try:
-            # Get all ready videos sorted by last access (oldest first)
+            # Get all ready videos
             videos = await db.get_all_ready_videos()
-            videos.sort(key=lambda x: x.get('last_accessed', 0) or 0)
             
+            if not videos:
+                logger.debug("No videos to clean up")
+                return []
+            
+            # Calculate current storage usage
             current_size = sum(v.get('file_size', 0) for v in videos)
             target_size = self.max_size_bytes * (1 - self.target_free_space / 100)
             
             # Check if cleanup is needed
             if current_size <= target_size:
-                return deleted_hashes
+                logger.debug(
+                    f"Cleanup not needed: {current_size:,} <= {target_size:,} bytes "
+                    f"({self.target_free_space}% free target)"
+                )
+                return []
             
-            # Delete oldest videos until target is reached
+            # Calculate how much space we need to free
+            needed_space = current_size - target_size
+            logger.info(
+                f"Cleanup needed: {current_size:,} bytes used, "
+                f"need to free {needed_space:,} bytes "
+                f"(target: {self.target_free_space}% free)"
+            )
+            
+            # Score each video and sort by score (lowest = highest priority for deletion)
+            scored_videos = []
             for video in videos:
-                if current_size <= target_size:
-                    break
-                    
                 video_hash = video['hash']
                 file_size = video.get('file_size', 0)
                 
+                # Skip videos with zero size (shouldn't happen for READY)
                 if not file_size:
                     continue
                 
-                # Find file using file_utils (handles both old and new structure)
+                # Check if file actually exists
                 file_path = await self.find_video_path(video_hash)
+                if not file_path or not file_path.exists():
+                    # Mark as deleted in DB, but don't count for cleanup
+                    await db.mark_video_deleted(video_hash)
+                    continue
                 
-                if file_path and file_path.exists():
-                    try:
+                score = self._calculate_video_score(video)
+                scored_videos.append({
+                    'hash': video_hash,
+                    'score': score,
+                    'file_size': file_size,
+                    'file_path': file_path,
+                    'title': video.get('title', 'Untitled'),
+                    'access_count': video.get('access_count', 0),
+                    'last_accessed': video.get('last_accessed'),
+                })
+            
+            # Sort by score (lowest first = highest deletion priority)
+            scored_videos.sort(key=lambda x: x['score'])
+            
+            # Log top candidates
+            if scored_videos:
+                logger.info(f"Top 5 cleanup candidates:")
+                for i, v in enumerate(scored_videos[:5]):
+                    logger.info(
+                        f"  {i+1}. {v['title'][:30]}... "
+                        f"(score: {v['score']:.3f}, "
+                        f"views: {v['access_count']}, "
+                        f"size: {v['file_size']:,} bytes)"
+                    )
+            
+            # Delete videos until we've freed enough space
+            freed_space = 0
+            deleted_count = 0
+            
+            for video in scored_videos:
+                if freed_space >= needed_space:
+                    break
+                    
+                video_hash = video['hash']
+                file_path = video['file_path']
+                file_size = video['file_size']
+                
+                try:
+                    # Delete file
+                    if file_path and file_path.exists():
                         file_path.unlink()
-                        await db.mark_video_deleted(video_hash)
-                        
-                        current_size -= file_size
+                        freed_space += file_size
+                        deleted_count += 1
                         deleted_hashes.append(video_hash)
                         
-                        logger.info(f"Deleted old video: {video_hash[:12]} ({file_size:,} bytes)")
+                        # Mark in database
+                        await db.mark_video_deleted(video_hash)
                         
-                    except Exception as e:
-                        logger.error(f"Failed to delete video {video_hash[:12]}: {e}")
+                        logger.info(
+                            f"Deleted: {video['title'][:30]}... "
+                            f"({file_size:,} bytes, "
+                            f"views: {video['access_count']}, "
+                            f"score: {video['score']:.3f})"
+                        )
+                    else:
+                        # File missing, mark as deleted
+                        await db.mark_video_deleted(video_hash)
+                        logger.warning(f"File missing for {video_hash[:12]}, marked as deleted")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to delete {video_hash[:12]}: {e}")
             
-            if deleted_hashes:
-                logger.info(f"Cleanup complete: removed {len(deleted_hashes)} videos")
-                
+            # Log cleanup results
+            logger.info(
+                f"Cleanup complete: removed {deleted_count} videos "
+                f"({freed_space:,} bytes freed)"
+            )
+            
+            # Check if we freed enough space
+            if freed_space < needed_space:
+                logger.warning(
+                    f"Could not free enough space! "
+                    f"Freed: {freed_space:,}, Needed: {needed_space:,}"
+                )
+            
         except Exception as e:
             logger.error(f"Cleanup error: {e}")
         finally:
