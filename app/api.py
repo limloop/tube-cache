@@ -483,21 +483,15 @@ async def get_storage_info_detailed():
     """
     info = await storage.get_storage_info()
     
-    # Add additional info
-    videos = await db.get_all_ready_videos()
+    # Получаем общее количество видео (все статусы)
+    total_videos = await db.get_total_videos_count()
     
-    # Sort by last accessed
-    def sort_key(item):
-        return get_date_sort_key(item, 'last_accessed')
-    
-    videos_sorted = sorted(videos, key=sort_key, reverse=True)
-    
-    # Top 10 oldest videos (candidates for cleanup)
-    oldest_videos = videos_sorted[:10] if len(videos_sorted) > 10 else videos_sorted
+    # Получаем 10 самых старых READY видео
+    oldest_videos = await db.get_oldest_videos(10)
     
     return {
         **info,
-        "total_videos": len(videos),
+        "total_videos": total_videos,
         "oldest_videos": [{
             "hash": v['hash'][:12] + '...',
             "title": v.get('title', 'Untitled'),

@@ -109,6 +109,144 @@ class Database:
             logger.error(f"Ошибка получения видео {video_hash}: {e}")
             return None
     
+    async def get_videos_paginated(
+        self,
+        status: Optional[VideoStatus] = None,
+        search: str = "",
+        limit: int = 20,
+        offset: int = 0
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """
+        Возвращает список видео с пагинацией и общее количество.
+        """
+        conditions = []
+        params = []
+
+        if status:
+            conditions.append("status = ?")
+            params.append(status.value)
+
+        if search:
+            conditions.append("(title LIKE ? OR uploader LIKE ? OR hash LIKE ?)")
+            search_pattern = f"%{search}%"
+            params.extend([search_pattern, search_pattern, search_pattern])
+
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+        # Подсчёт общего количества
+        count_query = f"SELECT COUNT(*) FROM videos WHERE {where_clause}"
+        cursor = await self.conn.execute(count_query, params)
+        total = (await cursor.fetchone())[0]
+        await cursor.close()
+
+        # Основной запрос с пагинацией
+        query = f"""
+            SELECT * FROM videos
+            WHERE {where_clause}
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+        """
+        cursor = await self.conn.execute(query, params + [limit, offset])
+        rows = await cursor.fetchall()
+        await cursor.close()
+
+        columns = [desc[0] for desc in cursor.description]
+        videos = [dict(zip(columns, row)) for row in rows]
+        return videos, total
+
+    async def get_neighbor_videos(self, video_hash: str) -> tuple[Optional[Dict], Optional[Dict]]:
+        """Возвращает предыдущее и следующее видео по дате создания."""
+        video = await self.get_video(video_hash)
+        if not video:
+            return None, None
+        created_at = video['created_at']
+
+        # Предыдущее (старше)
+        cursor = await self.conn.execute(
+            "SELECT * FROM videos WHERE status = 'ready' AND created_at < ? ORDER BY created_at DESC LIMIT 1",
+            (created_at,)
+        )
+        prev_row = await cursor.fetchone()
+        await cursor.close()
+        prev_video = None
+        if prev_row:
+            columns = [desc[0] for desc in cursor.description]
+            prev_video = dict(zip(columns, prev_row))
+
+        # Следующее (новее)
+        cursor = await self.conn.execute(
+            "SELECT * FROM videos WHERE status = 'ready' AND created_at > ? ORDER BY created_at ASC LIMIT 1",
+            (created_at,)
+        )
+        next_row = await cursor.fetchone()
+        await cursor.close()
+        next_video = None
+        if next_row:
+            columns = [desc[0] for desc in cursor.description]
+            next_video = dict(zip(columns, next_row))
+
+        return prev_video, next_video
+
+    async def get_random_ready_videos(self, limit: int = 5, exclude_hash: Optional[str] = None) -> List[Dict]:
+        """Возвращает случайные READY видео."""
+        query = "SELECT * FROM videos WHERE status = 'ready'"
+        params = []
+        if exclude_hash:
+            query += " AND hash != ?"
+            params.append(exclude_hash)
+        query += " ORDER BY RANDOM() LIMIT ?"
+        params.append(limit)
+
+        cursor = await self.conn.execute(query, params)
+        rows = await cursor.fetchall()
+        await cursor.close()
+        columns = [desc[0] for desc in cursor.description]
+        return [dict(zip(columns, row)) for row in rows]
+
+    async def get_oldest_videos(self, limit: int = 10) -> List[Dict]:
+        """Возвращает самые старые видео по last_accessed или created_at."""
+        query = """
+            SELECT hash, title, last_accessed, access_count, file_size
+            FROM videos
+            WHERE status = 'ready'
+            ORDER BY last_accessed ASC NULLS LAST, created_at ASC
+            LIMIT ?
+        """
+        cursor = await self.conn.execute(query, (limit,))
+        rows = await cursor.fetchall()
+        await cursor.close()
+        columns = [desc[0] for desc in cursor.description]
+        return [dict(zip(columns, row)) for row in rows]
+
+    async def get_total_videos_count(self) -> int:
+        """Возвращает общее количество видео (все статусы)."""
+        cursor = await self.conn.execute("SELECT COUNT(*) FROM videos")
+        count = (await cursor.fetchone())[0]
+        await cursor.close()
+        return count
+
+    async def get_count_videos(
+        self,
+        status: Optional[VideoStatus] = None,
+        search: str = ""
+    ) -> int:
+        """Возвращает количество видео по статусу и поисковому запросу."""
+        conditions = []
+        params = []
+        if status is not None:
+            conditions.append("status = ?")
+            params.append(status.value)
+        if search:
+            conditions.append("(title LIKE ? OR uploader LIKE ? OR hash LIKE ?)")
+            search_pattern = f"%{search}%"
+            params.extend([search_pattern, search_pattern, search_pattern])
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"SELECT COUNT(*) FROM videos WHERE {where_clause}"
+        cursor = await self.conn.execute(query, params)
+        count = (await cursor.fetchone())[0]
+        await cursor.close()
+        return count
+
     async def update_video_on_download(
         self,
         video_hash: str,
