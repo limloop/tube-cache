@@ -113,12 +113,7 @@ class StorageManager:
             )
             asyncio.create_task(self._safe_cleanup_old_videos())
         
-        # 2. Check logs
-        if current_time - self._last_log_cleanup > self.log_check_interval:
-            await self.cleanup_old_logs()
-            self._last_log_cleanup = current_time
-        
-        # 3. Check integrity
+        # 2. Check integrity
         if (current_time - self._last_integrity_check > self.integrity_check_interval and 
             not self._integrity_check_running):
             asyncio.create_task(self._safe_check_video_integrity())
@@ -371,40 +366,6 @@ class StorageManager:
             self._cleanup_running = False
         
         return deleted_hashes
-    
-    async def cleanup_old_logs(self) -> List[str]:
-        """
-        Delete log files older than retention period.
-        
-        Returns:
-            List of deleted file names
-        """
-        deleted_files = []
-        logs_dir = Path(settings.storage.logs_path)
-        
-        if not logs_dir.exists():
-            return deleted_files
-        
-        cutoff_date = datetime.now().timestamp() - (self.log_retention_days * 86400)
-        
-        for log_file in logs_dir.glob("*.log"):
-            if not log_file.is_file():
-                continue
-            
-            try:
-                file_date = self._get_file_date(log_file)
-                
-                if file_date.timestamp() < cutoff_date:
-                    log_file.unlink(missing_ok=True)
-                    deleted_files.append(log_file.name)
-                    
-            except Exception as e:
-                logger.warning(f"Failed to process {log_file.name}: {e}")
-        
-        if deleted_files:
-            logger.info(f"Cleaned {len(deleted_files)} log files")
-        
-        return deleted_files
     
     def _get_file_date(self, file_path: Path) -> datetime:
         """

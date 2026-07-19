@@ -9,7 +9,7 @@ import argparse
 import sys
 from pathlib import Path
 import logging
-from logging.handlers import RotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
 
 
@@ -209,14 +209,12 @@ def setup_logging():
     )
     
     # Файл логов по дате
-    current_date = datetime.now().strftime('%Y-%m-%d')
-    log_file = logs_dir / f"server_{current_date}.log"
-    
-    # Хендлер для файла (ротация по 10MB, максимум 5 файлов)
-    file_handler = RotatingFileHandler(
-        log_file,
-        maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=5,
+    log_file = logs_dir / "server.log"  # теперь имя фиксированное, без даты
+    file_handler = TimedRotatingFileHandler(
+        filename=str(log_file),
+        when='midnight',           # ротация в полночь
+        interval=1,                # каждый день
+        backupCount=settings.storage.log_retention_days,  # хранить N дней
         encoding='utf-8'
     )
     file_handler.setFormatter(formatter)
